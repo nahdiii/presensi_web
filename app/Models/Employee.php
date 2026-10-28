@@ -71,6 +71,21 @@ class Employee extends Model
         return $this->hasMany(LeaveRequest::class);
     }
 
+    public function exitPermits(): HasMany
+    {
+        return $this->hasMany(ExitPermit::class);
+    }
+
+    public function presenceChecks(): HasMany
+    {
+        return $this->hasMany(PresenceCheck::class);
+    }
+
+    public function corrections(): HasMany
+    {
+        return $this->hasMany(AttendanceCorrection::class);
+    }
+
     public function getNameAttribute(): ?string
     {
         return $this->user?->name;

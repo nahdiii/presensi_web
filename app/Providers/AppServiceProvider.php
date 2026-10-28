@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Notifications\Push\FcmPushNotifier;
+use App\Notifications\Push\LogPushNotifier;
+use App\Notifications\Push\PushNotifier;
 use App\Services\TodayOverview;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -18,6 +21,12 @@ class AppServiceProvider extends ServiceProvider
     {
         // Dashboard memanggil ringkasan hari ini dari beberapa widget sekaligus.
         $this->app->scoped(TodayOverview::class);
+
+        $this->app->singleton(PushNotifier::class, function () {
+            $path = config('services.fcm.credentials');
+
+            return $path && is_file($path) ? new FcmPushNotifier($path) : new LogPushNotifier;
+        });
     }
 
     /**

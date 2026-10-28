@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    // Firebase Cloud Messaging untuk notifikasi aplikasi. Isi FCM_CREDENTIALS
+    // dengan path berkas service account JSON; kosong = notifikasi hanya dicatat di log.
+    'fcm' => [
+        'credentials' => env('FCM_CREDENTIALS'),
+    ],
+
 ];

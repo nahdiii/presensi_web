@@ -22,8 +22,10 @@ docker compose exec app php artisan migrate --seed
 Akun contoh ada di `database/seeders/DatabaseSeeder.php` (admin SDM, pimpinan
 Fakultas Teknik, tendik, dosen). Koordinat kampus di seeder hanya perkiraan.
 
-Service `worker` (antrean kompres foto) dan `scheduler` (tutup hari presensi
-pukul 23.50 WITA) ikut berjalan lewat `docker compose up`.
+Service `worker` (antrean kompres foto) dan `scheduler` ikut berjalan lewat
+`docker compose up`. Jadwalnya: kirim cek kehadiran acak (tiap menit),
+pengingat absen (tiap 5 menit), tutup hari presensi (23.50 WITA), dan backup
+database (02.00 WITA).
 
 ## Test
 
@@ -45,6 +47,10 @@ semua halaman admin.
 | `app/Services/ShiftResolver.php` | Jadwal paling spesifik per pegawai per tanggal (override → kalender → pola pegawai → unit → induk → default) |
 | `app/Services/GeofenceService.php` | Haversine dan lokasi terdekat |
 | `app/Console/Commands/CloseAttendanceDay.php` | `attendance:close-day`: alpa, tidak absen pulang, izin, libur |
+| `app/Services/PresenceCheckService.php` | Cek kehadiran acak: jadwal 1–3 kali/hari, kirim, jawab, tidak merespons |
+| `app/Services/ExitPermitService.php` | Izin keluar sementara (keluar → kembali di radius) |
+| `app/Services/CorrectionService.php` | Koreksi lupa absen; diterapkan saat disetujui |
+| `app/Notifications/Push/` | Notifikasi FCM; tanpa kredensial hanya dicatat di log |
 | `app/Exports/MonthlyAttendanceExport.php` | Rekap bulanan .xlsx (ringkasan + rincian harian) |
 | `app/Filament/` | Resource admin, widget dashboard |
 | `routes/api.php` | Endpoint Flutter |
@@ -69,9 +75,33 @@ Railway. Pre-deploy command: `php artisan migrate --force`. Foto wajib disimpan 
 Cloudflare R2/S3 (`ATTENDANCE_PHOTO_DISK=s3`, isian `AWS_*` ada di `.env.example`)
 karena disk container hilang setiap redeploy.
 
+## Notifikasi (Firebase Cloud Messaging)
+
+Backend siap mengirim push untuk cek kehadiran acak, pengingat absen, dan
+keputusan izin/koreksi. Untuk mengaktifkannya:
+
+1. Buat proyek di Firebase Console, daftarkan aplikasi Android
+   (`com.nahdi.presensi_mobile`) dan iOS (`com.nahdi.presensiMobile`).
+2. Unduh service account JSON (Project settings → Service accounts), simpan
+   di server, lalu isi `FCM_CREDENTIALS=/path/ke/berkas.json`.
+3. Di aplikasi: tambahkan `firebase_core` + `firebase_messaging`, berkas
+   `google-services.json` / `GoogleService-Info.plist`, lalu kirim token ke
+   `POST /api/v1/devices/fcm-token`.
+
+Tanpa FCM, cek kehadiran acak tetap muncul di beranda aplikasi karena beranda
+menyegarkan status setiap menit selama aplikasi terbuka.
+
+## Backup
+
+`php artisan backup:database` membuat `pg_dump` ke disk `BACKUP_DISK`
+(default `local` → `storage/app/private/db`; produksi: bucket R2 terpisah) dan
+menyimpan 14 berkas terbaru. Pulihkan dengan
+`pg_restore --clean --no-owner -d <database> <berkas.dump>`.
+
 ## Cakupan versi ini
 
-Sudah: seluruh fitur **MVP (Fase 1)** di blueprint, plus pengajuan izin/sakit/cuti/
-tugas luar dengan persetujuan pimpinan dan endpoint token FCM. Belum: izin keluar
-sementara, cek kehadiran acak, koreksi lupa absen, kirim notifikasi FCM, kalender
-akademik lanjutan (Fase 2), dan seluruh Fase 3.
+Sudah: seluruh **Fase 1 (MVP)** dan **Fase 2**: izin/sakit/cuti/tugas luar, izin
+keluar sementara, cek kehadiran acak, koreksi lupa absen, pengingat dan
+notifikasi (perlu kredensial Firebase), laporan pola di dasbor pimpinan, dan
+backup harian. Belum: Fase 3 (presensi per jadwal mengajar/SIAKAD, verifikasi
+Wi-Fi, geofence latar belakang, pencocokan wajah, multi-institusi & langganan).

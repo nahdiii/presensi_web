@@ -8,11 +8,14 @@ use App\Enums\EmployeeType;
 use App\Enums\LeaveStatus;
 use App\Enums\LeaveType;
 use App\Models\Attendance;
+use App\Models\AttendanceCorrection;
 use App\Models\AttendanceAttempt;
 use App\Models\Employee;
+use App\Models\ExitPermit;
 use App\Models\Institution;
 use App\Models\LeaveRequest;
 use App\Models\Office;
+use App\Models\PresenceCheck;
 use App\Models\Unit;
 use App\Models\User;
 use App\Models\WorkPattern;
@@ -136,12 +139,61 @@ class DemoAttendanceSeeder extends Seeder
             }
         }
 
+        $this->seedPhaseTwo($employees, $today, $tz);
+
         foreach ($employees->random(4) as $i => $e) {
             LeaveRequest::create([
                 'institution_id' => $inst->id, 'employee_id' => $e->id,
                 'type' => [LeaveType::Cuti, LeaveType::Sakit, LeaveType::TugasLuar, LeaveType::Izin][$i],
                 'start_date' => $today->addDays($i + 1)->toDateString(), 'end_date' => $today->addDays($i + 2)->toDateString(),
                 'reason' => ['Cuti tahunan keperluan keluarga', 'Rawat jalan pasca operasi', 'Seminar nasional di Surabaya', 'Mengurus dokumen kependudukan'][$i],
+                'status' => LeaveStatus::Pending,
+            ]);
+        }
+    }
+
+    /** Contoh cek acak, izin keluar, dan koreksi supaya halaman admin fase 2 terisi. */
+    private function seedPhaseTwo($employees, CarbonImmutable $today, string $tz): void
+    {
+        $results = [PresenceCheck::OK, PresenceCheck::OK, PresenceCheck::OK, PresenceCheck::OK, PresenceCheck::NO_RESPONSE, PresenceCheck::OUT_OF_RADIUS, PresenceCheck::SKIPPED];
+        $fixed = $employees->filter(fn ($e) => $e->attendance_type === AttendanceType::Fixed)->values();
+        foreach (Attendance::whereNotNull('check_in_at')->whereIn('employee_id', $fixed->pluck('id'))->get() as $a) {
+            if (mt_rand(1, 100) > 60) {
+                continue;
+            }
+            $at = CarbonImmutable::parse($a->date->toDateString().' '.sprintf('%02d:%02d', mt_rand(9, 14), mt_rand(0, 59)), $tz);
+            if ($at->isFuture()) {
+                continue;
+            }
+            $result = $results[mt_rand(0, count($results) - 1)];
+            $office = Office::find($a->check_in_office_id);
+            PresenceCheck::create([
+                'institution_id' => $a->institution_id, 'employee_id' => $a->employee_id, 'attendance_id' => $a->id,
+                'result' => $result, 'scheduled_at' => $at->utc(), 'sent_at' => $at->utc(), 'deadline_at' => $at->addMinutes(15)->utc(),
+                'responded_at' => in_array($result, [PresenceCheck::OK, PresenceCheck::OUT_OF_RADIUS], true) ? $at->addMinutes(mt_rand(1, 12))->utc() : null,
+                'office_id' => $office?->id, 'distance_m' => $result === PresenceCheck::OUT_OF_RADIUS ? mt_rand(400, 2500) : mt_rand(5, 80),
+            ]);
+        }
+
+        $reasons = ['Mengantar berkas ke bank', 'Rapat koordinasi di rektorat', 'Mengambil dokumen di kantor pos', 'Keperluan keluarga mendesak'];
+        foreach ($fixed->random(min(4, $fixed->count())) as $i => $e) {
+            $out = $today->setTime(9 + $i, 15);
+            if ($out->isFuture()) {
+                $out = $today->subDay()->setTime(9 + $i, 15);
+            }
+            ExitPermit::create([
+                'institution_id' => $e->institution_id, 'employee_id' => $e->id, 'reason' => $reasons[$i],
+                'out_at' => $out->utc(), 'back_at' => $i === 0 ? null : $out->addMinutes(30 + 15 * $i)->utc(),
+                'status' => $i < 2 ? LeaveStatus::Pending : LeaveStatus::Approved,
+            ]);
+        }
+
+        foreach ($employees->random(3) as $i => $e) {
+            AttendanceCorrection::create([
+                'institution_id' => $e->institution_id, 'employee_id' => $e->id,
+                'date' => $today->subDays(2 + $i)->toDateString(),
+                'check_in_time' => $i === 1 ? null : '07:35', 'check_out_time' => '16:05',
+                'reason' => ['HP mati saat jam pulang', 'Lupa absen pulang karena rapat sampai sore', 'Aplikasi gagal mengirim foto'][$i],
                 'status' => LeaveStatus::Pending,
             ]);
         }

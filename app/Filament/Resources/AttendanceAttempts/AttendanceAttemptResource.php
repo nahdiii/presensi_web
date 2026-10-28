@@ -28,7 +28,7 @@ class AttendanceAttemptResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Log Percobaan Absen';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 9;
 
     public static function getNavigationGroup(): ?string
     {

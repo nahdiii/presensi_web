@@ -22,4 +22,27 @@ return [
     // Batas waktu absen pulang setelah jam selesai shift (menit). Lewat dari
     // ini, hari itu dianggap tidak absen pulang (incomplete).
     'checkout_grace_min' => 240,
+
+    // Cek kehadiran acak (fase 2) untuk pegawai bertipe presensi tetap.
+    'presence_checks' => [
+        'enabled' => (bool) env('ATTENDANCE_PRESENCE_CHECKS', true),
+        'min_per_day' => 1,
+        'max_per_day' => 3,
+        'response_minutes' => 15,
+        // Tidak dikirim di menit-menit awal/akhir shift dan sekitar jam istirahat.
+        'margin_minutes' => 60,
+        'min_gap_minutes' => 45,
+    ],
+
+    // Pengingat absen lewat notifikasi (menit sebelum jam masuk / sesudah jam pulang).
+    'reminders' => [
+        'check_in_before_min' => 15,
+        'check_out_after_min' => 0,
+    ],
+
+    // Disk backup database harian. Di produksi arahkan ke bucket R2 terpisah.
+    'backup_disk' => env('BACKUP_DISK', 'local'),
+
+    // Batas umur koreksi lupa absen (hari ke belakang).
+    'correction_max_days' => 30,
 ];

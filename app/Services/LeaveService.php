@@ -6,12 +6,16 @@ use App\Enums\LeaveStatus;
 use App\Models\Attendance;
 use App\Models\LeaveRequest;
 use App\Models\User;
+use App\Notifications\Push\PushNotifier;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Facades\DB;
 
 class LeaveService
 {
-    public function __construct(private readonly ShiftResolver $shifts) {}
+    public function __construct(
+        private readonly ShiftResolver $shifts,
+        private readonly PushNotifier $push,
+    ) {}
 
     /**
      * Setujui izin dan tandai hari-hari kerja dalam rentangnya. Hari yang
@@ -45,6 +49,8 @@ class LeaveService
                 ])->save();
             }
         });
+
+        $this->notify($leave, true);
     }
 
     public function reject(LeaveRequest $leave, User $approver, ?string $note = null): void
@@ -55,5 +61,13 @@ class LeaveService
             'approved_at' => now(),
             'review_note' => $note,
         ]);
+        $this->notify($leave, false);
+    }
+
+    private function notify(LeaveRequest $leave, bool $approved): void
+    {
+        $this->push->send($leave->employee, $leave->type->getLabel().' '.($approved ? 'disetujui' : 'ditolak'),
+            $leave->start_date->translatedFormat('d M').' – '.$leave->end_date->translatedFormat('d M Y').($leave->review_note ? ': '.$leave->review_note : ''),
+            ['type' => 'leave', 'id' => (string) $leave->id]);
     }
 }

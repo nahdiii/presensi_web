@@ -2,8 +2,10 @@
 
 use App\Http\Controllers\Api\V1\AttendanceController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\CorrectionController;
 use App\Http\Controllers\Api\V1\LeaveController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\PresenceController;
 use App\Http\Middleware\EnsureKnownDevice;
 use Illuminate\Support\Facades\Route;
 
@@ -22,6 +24,13 @@ Route::prefix('v1')->group(function () {
         Route::get('attendance/{attendance}', [AttendanceController::class, 'show'])->whereNumber('attendance');
         Route::get('leaves', [LeaveController::class, 'index']);
         Route::post('leaves', [LeaveController::class, 'store']);
+
+        // Fase 2
+        Route::get('presence-checks/pending', [PresenceController::class, 'pending']);
+        Route::get('exit-permits', [PresenceController::class, 'permits']);
+        Route::post('exit-permits', [PresenceController::class, 'startPermit']);
+        Route::get('corrections', [CorrectionController::class, 'index']);
+        Route::post('corrections', [CorrectionController::class, 'store']);
     });
 
     // Absen tidak memakai EnsureKnownDevice: perangkat dicek di
@@ -29,5 +38,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware(['auth:sanctum', 'throttle:attendance'])->group(function () {
         Route::post('attendance/check-in', [AttendanceController::class, 'checkIn']);
         Route::post('attendance/check-out', [AttendanceController::class, 'checkOut']);
+        Route::post('presence-checks/{presenceCheck}/respond', [PresenceController::class, 'respond'])->whereNumber('presenceCheck');
+        Route::post('exit-permits/{exitPermit}/return', [PresenceController::class, 'returnPermit'])->whereNumber('exitPermit');
     });
 });

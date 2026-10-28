@@ -95,8 +95,9 @@ class AttendanceService
             }
 
             $this->queuePhoto($photo);
+            app(PresenceCheckService::class)->planFor($attendance->refresh(), $employee);
 
-            return $attendance->refresh();
+            return $attendance;
         });
     }
 
@@ -156,6 +157,8 @@ class AttendanceService
             });
 
             $this->queuePhoto($photo);
+            app(ExitPermitService::class)->closeActive($employee, $now);
+            app(PresenceCheckService::class)->cancelRemaining($attendance);
 
             return $attendance->refresh();
         });
@@ -248,7 +251,7 @@ class AttendanceService
     }
 
     /** Presensi yang sudah absen masuk tetapi belum pulang (hari ini atau shift kemarin). */
-    private function openAttendance(Employee $employee, CarbonImmutable $now): ?Attendance
+    public function openAttendance(Employee $employee, CarbonImmutable $now): ?Attendance
     {
         return Attendance::where('employee_id', $employee->id)
             ->where(fn ($q) => $q->whereDate('date', $now->toDateString())->orWhereDate('date', $now->subDay()->toDateString()))
@@ -265,7 +268,7 @@ class AttendanceService
             });
     }
 
-    private function assertDevice(Employee $employee, ?string $uid): Device
+    public function assertDevice(Employee $employee, ?string $uid): Device
     {
         if (! $employee->user->is_active) {
             throw new AttendanceRejected(RejectReason::InactiveAccount, 'Akun Anda dinonaktifkan. Hubungi Bagian SDM.');
@@ -286,7 +289,7 @@ class AttendanceService
      *
      * @return array{0: Office, 1: float}
      */
-    private function assertLocation(Employee $employee, PunchData $p, array &$ctx): array
+    public function assertLocation(Employee $employee, PunchData $p, array &$ctx): array
     {
         if ($p->isMocked) {
             throw new AttendanceRejected(RejectReason::MockLocation,
@@ -329,7 +332,7 @@ class AttendanceService
             'Anda berada '.round($nearest[1])." m dari {$nearest[0]->name}. Batas {$nearest[0]->radius_m} m.");
     }
 
-    private function assertFace(PunchData $p): void
+    public function assertFace(PunchData $p): void
     {
         if (! $p->photo) {
             throw new AttendanceRejected(RejectReason::NoFace, 'Foto selfie wajib dilampirkan.');
@@ -341,7 +344,7 @@ class AttendanceService
         }
     }
 
-    private function storePhoto(Employee $employee, PunchData $p, string $date, string $kind): string
+    public function storePhoto(Employee $employee, PunchData $p, string $date, string $kind): string
     {
         $dir = 'photos/'.substr($date, 0, 7).'/'.$employee->id;
         $name = "$date-$kind-".Str::random(8).'.jpg';
@@ -349,13 +352,16 @@ class AttendanceService
         return $p->photo->storeAs($dir, $name, config('attendance.photo_disk'));
     }
 
-    private function queuePhoto(string $path): void
+    public function queuePhoto(string $path): void
     {
         ProcessAttendancePhoto::dispatch(config('attendance.photo_disk'), $path)->afterCommit();
     }
 
-    /** Menjalankan $fn dan mencatat percobaannya, diterima maupun ditolak. */
-    private function audited(Employee $employee, string $type, PunchData $p, array &$ctx, callable $fn): Attendance
+    /**
+     * Menjalankan $fn dan mencatat percobaannya, diterima maupun ditolak.
+     * Dipakai juga oleh cek kehadiran acak dan izin keluar.
+     */
+    public function audited(Employee $employee, string $type, PunchData $p, array &$ctx, callable $fn): mixed
     {
         // $ctx diisi selama cek berjalan (lokasi terdekat, jarak), jadi dibaca saat dicatat.
         $log = function (string $result, ?RejectReason $reason) use ($employee, $type, $p, &$ctx) {

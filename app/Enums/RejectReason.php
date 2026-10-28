@@ -19,6 +19,9 @@ enum RejectReason: string implements HasLabel
     case NotCheckedIn = 'not_checked_in';
     case AlreadyCheckedOut = 'already_checked_out';
     case InactiveAccount = 'inactive_account';
+    case CheckExpired = 'check_expired';
+    case ExitPermitActive = 'exit_permit_active';
+    case NoExitPermit = 'no_exit_permit';
 
     public function getLabel(): string
     {
@@ -35,6 +38,9 @@ enum RejectReason: string implements HasLabel
             self::NotCheckedIn => 'Belum absen masuk',
             self::AlreadyCheckedOut => 'Sudah absen pulang',
             self::InactiveAccount => 'Akun nonaktif',
+            self::CheckExpired => 'Cek kehadiran kedaluwarsa',
+            self::ExitPermitActive => 'Masih izin keluar',
+            self::NoExitPermit => 'Tidak ada izin keluar aktif',
         };
     }
 
