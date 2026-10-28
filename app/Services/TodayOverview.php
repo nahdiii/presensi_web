@@ -14,6 +14,9 @@ use Illuminate\Support\Collection;
  */
 class TodayOverview
 {
+    /** @var array<string, Collection> hasil per cakupan unit, berlaku selama satu request */
+    private array $cache = [];
+
     public function __construct(private readonly ShiftResolver $shifts) {}
 
     /**
@@ -21,6 +24,11 @@ class TodayOverview
      * @return Collection<int, array{employee: Employee, scheduled: bool, attendance: ?Attendance, state: string}>
      */
     public function rows(?array $unitIds = null): Collection
+    {
+        return $this->cache[json_encode($unitIds)] ??= $this->compute($unitIds);
+    }
+
+    private function compute(?array $unitIds): Collection
     {
         $today = CarbonImmutable::now(config('attendance.timezone'))->toDateString();
         $employees = Employee::with(['user', 'unit'])

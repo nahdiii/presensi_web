@@ -17,7 +17,6 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -74,7 +73,8 @@ class AttendanceResource extends Resource
                     ->color(fn ($state) => $state > 0 ? 'warning' : null),
                 TextColumn::make('worked_minutes')->label('Hadir')
                     ->formatStateUsing(fn ($state) => $state ? intdiv($state, 60).'j '.($state % 60).'m' : '-'),
-                IconColumn::make('is_early_leave')->label('Pulang awal')->boolean()->trueColor('warning')->toggleable(),
+                TextColumn::make('early_leave_note')->label('Catatan')->badge()->color('warning')
+                    ->state(fn (Attendance $r) => $r->is_early_leave ? 'Pulang awal' : null)->toggleable(),
                 TextColumn::make('check_in_distance_m')->label('Jarak masuk')->suffix(' m')->numeric(0)->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([

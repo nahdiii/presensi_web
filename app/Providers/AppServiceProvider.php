@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\TodayOverview;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -15,7 +16,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Dashboard memanggil ringkasan hari ini dari beberapa widget sekaligus.
+        $this->app->scoped(TodayOverview::class);
     }
 
     /**

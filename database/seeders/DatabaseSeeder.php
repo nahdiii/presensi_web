@@ -24,6 +24,7 @@ use Spatie\Permission\Models\Role;
  *   dekan.ft@kampus.test  Pimpinan unit Fakultas Teknik (panel + aplikasi)
  *   tendik@kampus.test    Tendik Biro SDM, presensi tetap (aplikasi)
  *   dosen@kampus.test     Dosen Informatika, presensi fleksibel (aplikasi)
+ *   demo1..12@kampus.test Pegawai contoh berisi riwayat 2 minggu (hanya di lokal)
  *
  * Koordinat kampus hanya perkiraan; Bagian SDM perlu menyesuaikannya.
  */
@@ -83,6 +84,10 @@ class DatabaseSeeder extends Seeder
 
         CalendarEvent::create(['institution_id' => $inst->id, 'date' => '2026-12-25', 'name' => 'Hari Raya Natal', 'type' => CalendarEventType::LiburNasional]);
         CalendarEvent::create(['institution_id' => $inst->id, 'date' => '2026-12-24', 'name' => 'Cuti bersama Natal', 'type' => CalendarEventType::CutiBersama]);
+
+        if (app()->environment('local')) {
+            $this->call(DemoAttendanceSeeder::class);
+        }
     }
 
     /** @param array<int, array{0: string, 1: string, 2?: string, 3?: string}> $days */

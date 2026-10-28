@@ -16,20 +16,24 @@ class ListAttendances extends ListRecords
 
     protected function getHeaderActions(): array
     {
+        return [self::exportAction()];
+    }
+
+    /** Dipakai juga di dashboard. */
+    public static function exportAction(): Action
+    {
         $months = collect(range(0, 11))->mapWithKeys(function ($i) {
             $m = now()->startOfMonth()->subMonths($i);
 
             return [$m->format('Y-m') => $m->translatedFormat('F Y')];
         })->all();
 
-        return [
-            Action::make('export')->label('Ekspor rekap bulanan')->icon(Heroicon::OutlinedArrowDownTray)
-                ->schema([Select::make('month')->label('Bulan')->options($months)->default(array_key_first($months))->required()])
-                ->modalSubmitActionLabel('Unduh .xlsx')
-                ->action(fn (array $data) => Excel::download(
-                    new MonthlyAttendanceExport($data['month'], auth()->user()->supervisedUnitIds()),
-                    "rekap-presensi-{$data['month']}.xlsx",
-                )),
-        ];
+        return Action::make('export')->label('Ekspor rekap bulanan')->icon(Heroicon::OutlinedArrowDownTray)
+            ->schema([Select::make('month')->label('Bulan')->options($months)->default(array_key_first($months))->required()])
+            ->modalSubmitActionLabel('Unduh .xlsx')
+            ->action(fn (array $data) => Excel::download(
+                new MonthlyAttendanceExport($data['month'], auth()->user()->supervisedUnitIds()),
+                "rekap-presensi-{$data['month']}.xlsx",
+            ));
     }
 }
