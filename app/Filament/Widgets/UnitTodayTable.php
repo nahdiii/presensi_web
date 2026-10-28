@@ -12,7 +12,9 @@ use Illuminate\Database\Eloquent\Builder;
 /** Rekap hari ini per unit: hadir, terlambat, belum absen. */
 class UnitTodayTable extends TableWidget
 {
-    protected static ?int $sort = 2;
+    protected static ?int $sort = 4;
+
+    protected static bool $isLazy = false;
 
     protected int|string|array $columnSpan = 'full';
 
@@ -39,12 +41,27 @@ class UnitTodayTable extends TableWidget
             ->defaultSort('name')
             ->paginated(false)
             ->columns([
-                TextColumn::make('name')->label('Unit'),
+                TextColumn::make('name')->label('Unit')->weight('semibold')
+                    ->description(fn (Unit $u) => $u->type?->getLabel()),
                 $col('scheduled', 'Terjadwal'),
                 $col('present', 'Tepat waktu', 'success'),
                 $col('late', 'Terlambat', 'warning'),
                 $col('leave', 'Izin', 'info'),
                 $col('not_yet', 'Belum absen', 'danger'),
+                TextColumn::make('rate')->label('Kehadiran')->alignEnd()->badge()
+                    ->state(function (Unit $u) {
+                        $c = $this->counts()[$u->id] ?? [];
+
+                        return ($c['scheduled'] ?? 0)
+                            ? round((($c['present'] ?? 0) + ($c['late'] ?? 0)) / $c['scheduled'] * 100).'%'
+                            : '-';
+                    })
+                    ->color(fn (string $state) => match (true) {
+                        $state === '-' => 'gray',
+                        (int) $state >= 90 => 'success',
+                        (int) $state >= 70 => 'warning',
+                        default => 'danger',
+                    }),
             ]);
     }
 }

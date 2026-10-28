@@ -184,7 +184,7 @@
     }
     .fi-wi-stats-overview-stat-label {
         grid-column: 2; grid-row: 2; font-size: .875rem !important; font-weight: 400 !important; color: var(--pk-muted) !important;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        line-height: 1.25rem;
     }
     .fi-wi-stats-overview-stat-description { grid-column: 2; grid-row: 3; font-size: .75rem !important; margin-top: .125rem; color: var(--pk-faint) !important; }
     .fi-wi-stats-overview-stat-description * { color: inherit !important; }
