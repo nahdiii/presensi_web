@@ -131,14 +131,6 @@
     .fi-main { padding-top: 2rem; }
     .fi-header-heading { font-size: 1.5rem !important; line-height: 2rem !important; font-weight: 700 !important; letter-spacing: -.025em !important; }
     .fi-header-subheading { font-size: .875rem !important; margin-top: .25rem !important; color: var(--pk-muted) !important; }
-    .pk-scope-pill {
-        display: inline-flex; align-items: center; gap: .375rem; border-radius: 9999px; padding: .25rem .625rem;
-        font-size: .75rem; font-weight: 600; color: var(--pk-utama-700); background: var(--pk-utama-50);
-        box-shadow: inset 0 0 0 1px rgb(99 102 241 / .2); white-space: nowrap;
-    }
-    .dark .pk-scope-pill { color: #a5b4fc; background: rgb(99 102 241 / .1); }
-    .pk-scope-pill .pk-dot { width: .375rem; height: .375rem; border-radius: 9999px; background: currentColor; }
-    .pk-scope-pill svg { width: .875rem; height: .875rem; }
 
     /* ================= Kartu ================= */
     .fi-section, .fi-ta-ctn, .fi-wi-stats-overview-stat {
@@ -201,24 +193,6 @@
     .pk-stat-warning { --pk-from: #f59e0b; --pk-to: #ea580c; }
     .pk-stat-info    { --pk-from: #0ea5e9; --pk-to: #0369a1; }
     .pk-stat-danger  { --pk-from: #f43f5e; --pk-to: #be123c; }
-
-    /* ================= Panel daftar & bar progres ================= */
-    .pk-list { display: grid; gap: .875rem; }
-    .pk-list-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; font-size: .875rem; margin-bottom: .375rem; }
-    .pk-list-label { color: var(--pk-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .dark .pk-list-label { color: #cbd5e1; }
-    .pk-list-value { flex: none; font-weight: 600; color: var(--pk-text); font-variant-numeric: tabular-nums; }
-    .pk-list-value small { font-weight: 400; font-size: .75rem; color: var(--pk-muted); margin-inline-start: .5rem; display: inline-block; min-width: 2.5rem; text-align: right; }
-    .pk-track { height: .5rem; border-radius: 9999px; overflow: hidden; background: var(--pk-track); }
-    .pk-track.pk-thin { height: .375rem; }
-    .pk-fill { height: 100%; border-radius: 9999px; transition: width .3s; background: var(--pk-utama-500); }
-    .pk-fill.hijau { background: #10b981; } .pk-fill.kuning { background: #f59e0b; } .pk-fill.oranye { background: #fb923c; }
-    .pk-fill.biru { background: #0ea5e9; } .pk-fill.merah { background: #f43f5e; } .pk-fill.abu { background: #94a3b8; }
-    .pk-divided { display: grid; }
-    .pk-divided > li { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-block: .625rem; border-top: 1px solid var(--pk-hover); font-size: .875rem; }
-    .pk-divided > li:first-child { border-top: 0; padding-top: 0; }
-    .pk-divided > li:last-child { padding-bottom: 0; }
-    .pk-empty { font-size: .875rem; color: var(--pk-muted); text-align: center; padding: 1.5rem 0; }
 
     /* ================= Login (gaya SIMPEG) ================= */
     .fi-simple-layout:has(.pk-auth-aside) { background: var(--pk-surface); }

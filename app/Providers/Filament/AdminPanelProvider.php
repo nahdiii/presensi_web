@@ -3,17 +3,18 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Auth\Login;
-use App\Filament\Pages\Dashboard;
 use App\Support\InitialsAvatarProvider;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\Support\Enums\Width;
 use Filament\View\PanelsRenderHook;
+use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -46,14 +47,17 @@ class AdminPanelProvider extends PanelProvider
             ->renderHook(PanelsRenderHook::TOPBAR_LOGO_AFTER, fn () => view('filament.topbar-context'))
             ->renderHook(PanelsRenderHook::GLOBAL_SEARCH_AFTER, fn () => view('filament.theme-toggle'))
             ->renderHook(PanelsRenderHook::USER_MENU_AFTER, fn () => view('filament.user-identity'))
-            ->renderHook(PanelsRenderHook::PAGE_HEADER_ACTIONS_BEFORE, fn () => view('filament.scope-pill', ['label' => app(Dashboard::class)->scopeLabel()]), scopes: Dashboard::class)
             ->renderHook(PanelsRenderHook::SIMPLE_LAYOUT_START, fn () => view('filament.auth-aside'), scopes: Login::class)
             ->navigationGroups(['Presensi', 'Kepegawaian', 'Pengaturan'])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
-            ->pages([])
+            ->pages([
+                Dashboard::class,
+            ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
-            ->widgets([])
+            ->widgets([
+                AccountWidget::class,
+            ])
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

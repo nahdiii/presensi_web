@@ -12,11 +12,9 @@ use Illuminate\Database\Eloquent\Builder;
 
 class LateTodayTable extends TableWidget
 {
-    protected static ?int $sort = 6;
+    protected static ?int $sort = 3;
 
-    protected static bool $isLazy = false;
-
-    protected int|string|array $columnSpan = 1;
+    protected int|string|array $columnSpan = 'full';
 
     protected static ?string $heading = 'Terlambat hari ini';
 
@@ -33,13 +31,12 @@ class LateTodayTable extends TableWidget
                 ->when($units !== null, fn ($query) => $query->whereHas('employee', fn ($e) => $e->whereIn('unit_id', $units))))
             ->defaultSort('late_minutes', 'desc')
             ->emptyStateHeading('Belum ada yang terlambat hari ini')
-            ->emptyStateIcon('heroicon-o-face-smile')
-            ->paginated([5])
             ->columns([
-                TextColumn::make('employee.user.name')->label('Pegawai')->weight('semibold')
-                    ->description(fn (Attendance $r) => $r->employee->unit?->name),
+                TextColumn::make('employee.user.name')->label('Pegawai'),
+                TextColumn::make('employee.unit.name')->label('Unit'),
                 TextColumn::make('check_in_at')->label('Masuk')->dateTime('H:i', $tz),
-                TextColumn::make('late_minutes')->label('Telat')->suffix(' mnt')->badge()->color('warning'),
+                TextColumn::make('late_minutes')->label('Terlambat')->suffix(' menit')->color('warning'),
+                TextColumn::make('checkInOffice.name')->label('Lokasi'),
             ]);
     }
 }
