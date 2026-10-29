@@ -86,6 +86,16 @@ class Employee extends Model
         return $this->hasMany(AttendanceCorrection::class);
     }
 
+    public function teachingSchedules(): HasMany
+    {
+        return $this->hasMany(TeachingSchedule::class);
+    }
+
+    public function teachingSessions(): HasMany
+    {
+        return $this->hasMany(TeachingSession::class);
+    }
+
     public function getNameAttribute(): ?string
     {
         return $this->user?->name;

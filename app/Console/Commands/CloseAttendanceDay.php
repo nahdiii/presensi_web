@@ -10,6 +10,7 @@ use App\Models\CalendarEvent;
 use App\Models\Employee;
 use App\Models\LeaveRequest;
 use App\Services\ShiftResolver;
+use App\Services\TeachingSessionService;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -18,6 +19,7 @@ use Illuminate\Console\Command;
 /**
  * Menutup hari presensi: alpa bagi yang terjadwal tetapi tidak absen,
  * incomplete bagi yang tidak absen pulang, dan izin/libur bila berlaku.
+ * Sesi mengajar yang lewat tanpa absen ikut ditandai tidak hadir.
  * Aman dijalankan berulang. Setiap malam memproses hari ini dan kemarin,
  * supaya shift yang melewati tengah malam ikut tertutup keesokan harinya.
  */
@@ -25,7 +27,7 @@ use Illuminate\Console\Command;
 #[Description('Tandai alpa, tidak absen pulang, izin, dan libur untuk hari yang sudah lewat')]
 class CloseAttendanceDay extends Command
 {
-    public function handle(ShiftResolver $shifts): int
+    public function handle(ShiftResolver $shifts, TeachingSessionService $sessions): int
     {
         $tz = config('attendance.timezone');
         $now = CarbonImmutable::now($tz);
@@ -47,6 +49,13 @@ class CloseAttendanceDay extends Command
                     }
                 }
             });
+
+        // Sesi mengajar (fase 3) ditutup per jadwal, untuk semua tipe presensi.
+        foreach ($dates as $date) {
+            foreach ($sessions->closeDay($date, $now) as $status => $n) {
+                $counts[$status] = ($counts[$status] ?? 0) + $n;
+            }
+        }
 
         foreach ($counts as $status => $n) {
             $this->line("$status: $n");

@@ -5,13 +5,14 @@ namespace App\Exports;
 use App\Enums\AttendanceStatus;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\TeachingSession;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 
 /**
  * Rekap bulanan untuk tunjangan kehadiran/remunerasi: satu lembar ringkasan
- * per pegawai dan satu lembar rincian harian.
+ * per pegawai, satu lembar rincian harian, dan lembar sesi mengajar bila ada.
  */
 class MonthlyAttendanceExport implements WithMultipleSheets
 {
@@ -37,10 +38,23 @@ class MonthlyAttendanceExport implements WithMultipleSheets
             ->get()
             ->groupBy('employee_id');
 
-        return [
+        $sessions = TeachingSession::with('office')
+            ->whereIn('employee_id', $employees->pluck('id'))
+            ->whereDate('date', '>=', $start->toDateString())
+            ->whereDate('date', '<=', $end->toDateString())
+            ->orderBy('date')->orderBy('start_time')
+            ->get()
+            ->groupBy('employee_id');
+
+        $sheets = [
             new ArraySheet('Rekap '.$this->month, $this->recapHeadings(), $this->recapRows($employees, $attendances)),
             new ArraySheet('Rincian harian', $this->detailHeadings(), $this->detailRows($employees, $attendances)),
         ];
+        if ($sessions->isNotEmpty()) {
+            $sheets[] = new ArraySheet('Sesi mengajar', $this->sessionHeadings(), $this->sessionRows($employees, $sessions));
+        }
+
+        return $sheets;
     }
 
     private function recapHeadings(): array
@@ -67,6 +81,30 @@ class MonthlyAttendanceExport implements WithMultipleSheets
                 round($worked / 60, 2), $attended ? round($worked / 60 / $attended, 2) : 0,
             ];
         })->all();
+    }
+
+    private function sessionHeadings(): array
+    {
+        return ['Tanggal', 'NIP', 'Nama', 'Unit', 'Kode MK', 'Mata kuliah', 'Kelas', 'Jadwal', 'Ruang', 'Status',
+            'Absen', 'Terlambat (menit)', 'Lokasi', 'Pokok bahasan'];
+    }
+
+    /** @param Collection<int, Collection<int, TeachingSession>> $byEmployee */
+    private function sessionRows(Collection $employees, Collection $byEmployee): array
+    {
+        $rows = [];
+        foreach ($employees as $e) {
+            foreach ($byEmployee->get($e->id, collect()) as $s) {
+                $rows[] = [
+                    $s->date->toDateString(), $e->nip, $e->user->name, $e->unit?->name, $s->course_code, $s->course_name,
+                    $s->class_name, substr($s->start_time, 0, 5).'–'.substr($s->end_time, 0, 5), $s->room, $s->status->getLabel(),
+                    $s->checked_in_at?->setTimezone($s->office?->timezone ?? config('attendance.timezone'))->format('H:i'),
+                    $s->late_minutes, $s->office?->name, $s->topic,
+                ];
+            }
+        }
+
+        return $rows;
     }
 
     private function detailHeadings(): array

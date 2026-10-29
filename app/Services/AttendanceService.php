@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\AttendanceStatus;
+use App\Enums\AttendanceType;
 use App\Enums\RejectReason;
 use App\Exceptions\AttendanceRejected;
 use App\Jobs\ProcessAttendancePhoto;
@@ -15,6 +16,7 @@ use App\Support\DaySchedule;
 use App\Support\PunchData;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -36,6 +38,10 @@ class AttendanceService
 
         return $this->audited($employee, 'in', $p, $ctx, function () use ($employee, $p, &$ctx) {
             $device = $this->assertDevice($employee, $p->deviceUid);
+            if ($employee->attendance_type === AttendanceType::Session) {
+                throw new AttendanceRejected(RejectReason::OutsideWindow,
+                    'Presensi Anda dihitung per sesi mengajar. Absen lewat jadwal mengajar di beranda.');
+            }
             [$office, $distance] = $this->assertLocation($employee, $p, $ctx);
             $now = CarbonImmutable::now($office->timezone);
             [$date, $schedule] = $this->checkInDay($employee, $now);
@@ -182,7 +188,9 @@ class AttendanceService
             $attendance = Attendance::where('employee_id', $employee->id)->whereDate('date', $date)->first();
         }
 
-        [$action, $message] = $this->nextAction($attendance, $schedule, $date, $tz, $now);
+        [$action, $message] = $employee->attendance_type === AttendanceType::Session
+            ? ['sessions', 'Presensi Anda dihitung per sesi mengajar.']
+            : $this->nextAction($attendance, $schedule, $date, $tz, $now);
 
         return compact('date', 'now', 'tz', 'schedule', 'attendance', 'action', 'message');
     }
@@ -285,11 +293,13 @@ class AttendanceService
     /**
      * Cek lokasi asli lalu radius. Jarak dicek terhadap lokasi terdekat yang
      * diizinkan; bila pegawai berada di radius lokasi kampus lain yang tidak
-     * diizinkan untuknya, ditolak office_not_allowed.
+     * diizinkan untuknya, ditolak office_not_allowed. $allowed mempersempit
+     * lokasi, mis. gedung tempat kuliah dijadwalkan.
      *
+     * @param  Collection<int, Office>|null  $allowed
      * @return array{0: Office, 1: float}
      */
-    public function assertLocation(Employee $employee, PunchData $p, array &$ctx): array
+    public function assertLocation(Employee $employee, PunchData $p, array &$ctx, ?Collection $allowed = null): array
     {
         if ($p->isMocked) {
             throw new AttendanceRejected(RejectReason::MockLocation,
@@ -305,7 +315,7 @@ class AttendanceService
                 'Sinyal GPS kurang akurat (±'.round($p->accuracy)." m, batas $maxAccuracy m). Pindah ke tempat terbuka lalu coba lagi.");
         }
 
-        $allowed = $employee->offices->where('is_active', true);
+        $allowed = ($allowed ?? $employee->offices)->where('is_active', true);
         $nearest = $this->geofence->nearest($allowed, $p->lat, $p->lng);
         if ($nearest) {
             [$office, $distance] = $nearest;

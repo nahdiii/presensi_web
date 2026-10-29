@@ -8,5 +8,7 @@ Laravel 13 + Filament 5 + Sanctum + spatie/laravel-permission, PostgreSQL. Lihat
   `docker compose exec app php artisan test`.
 - Semua aturan absen ada di `app/Services/AttendanceService.php`; controller tipis.
   Setiap aturan penolakan wajib punya test di `tests/Feature/CheckInTest.php`.
+  Absen per sesi mengajar ada di `app/Services/TeachingSessionService.php` (memakai
+  cek lokasi/wajah AttendanceService); test-nya di `tests/Feature/TeachingSessionTest.php`.
 - Closure Filament disuntik berdasarkan **nama** parameter: pakai `$query`, `$data`,
   `$record`, `$get`, `$set` — nama lain (mis. `$q`) menghasilkan objek kosong.

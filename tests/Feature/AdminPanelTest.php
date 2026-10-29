@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Employee;
+use App\Models\TeachingSession;
 use App\Models\User;
 use App\Models\WorkPattern;
 use Database\Seeders\DatabaseSeeder;
@@ -28,6 +29,7 @@ class AdminPanelTest extends TestCase
             '/admin/units', '/admin/offices', '/admin/work-patterns', '/admin/work-patterns/create', '/admin/work-patterns/{pattern}/edit',
             '/admin/schedule-overrides', '/admin/calendar-events', '/admin/attendances', '/admin/leave-requests', '/admin/attendance-attempts',
             '/admin/exit-permits', '/admin/presence-checks', '/admin/attendance-corrections',
+            '/admin/teaching-sessions', '/admin/teaching-sessions/{session}', '/admin/teaching-schedules', '/admin/courses',
         ]);
     }
 
@@ -35,7 +37,12 @@ class AdminPanelTest extends TestCase
     public function test_admin_can_open_page(string $url): void
     {
         // ID di Postgres tidak kembali ke 1 antar test, jadi diisi saat berjalan.
-        $url = strtr($url, ['{employee}' => Employee::value('id'), '{pattern}' => WorkPattern::value('id')]);
+        if (str_contains($url, '{session}')) {
+            $this->travelTo('2026-10-26 23:50:00'); // Senin: semua jadwal contoh sudah lewat.
+            $this->artisan('attendance:close-day')->assertSuccessful();
+        }
+        $url = strtr($url, ['{employee}' => Employee::value('id'), '{pattern}' => WorkPattern::value('id'),
+            '{session}' => TeachingSession::value('id')]);
         $this->actingAs(User::where('email', 'admin@kampus.test')->sole())->get($url)->assertOk();
     }
 
@@ -46,6 +53,8 @@ class AdminPanelTest extends TestCase
         $this->actingAs($head)->get('/admin')->assertOk();
         $this->actingAs($head)->get('/admin/attendances')->assertOk();
         $this->actingAs($head)->get('/admin/leave-requests')->assertOk();
+        $this->actingAs($head)->get('/admin/teaching-sessions')->assertOk();
+        $this->actingAs($head)->get('/admin/teaching-schedules')->assertForbidden();
         $this->actingAs($head)->get('/admin/offices')->assertForbidden();
         $this->actingAs($head)->get('/admin/employees/create')->assertForbidden();
     }

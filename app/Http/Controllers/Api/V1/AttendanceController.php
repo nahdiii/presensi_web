@@ -9,10 +9,12 @@ use App\Http\Requests\PunchRequest;
 use App\Http\Resources\AttendanceResource;
 use App\Http\Resources\ExitPermitResource;
 use App\Http\Resources\PresenceCheckResource;
+use App\Http\Resources\TeachingSlotResource;
 use App\Models\Attendance;
 use App\Services\AttendanceService;
 use App\Services\ExitPermitService;
 use App\Services\PresenceCheckService;
+use App\Services\TeachingSessionService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -54,6 +56,8 @@ class AttendanceController extends Controller
             'can_exit' => $t['action'] === 'check_out' && $employee->attendance_type === AttendanceType::Fixed,
             'exit_permit' => ($permit = app(ExitPermitService::class)->active($employee)) ? new ExitPermitResource($permit) : null,
             'presence_check' => ($check = app(PresenceCheckService::class)->pendingFor($employee)) ? new PresenceCheckResource($check) : null,
+            // Fase 3: jadwal mengajar hari ini (kosong bila tidak mengajar).
+            'teaching' => TeachingSlotResource::collection(app(TeachingSessionService::class)->forDay($employee, $t['now'])),
         ]]);
     }
 

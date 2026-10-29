@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Enums\AttendanceType;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\TeachingSchedule;
 use App\Notifications\Push\PushNotifier;
 use App\Services\ShiftResolver;
 use Carbon\CarbonImmutable;
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\Cache;
 
 /**
  * Pengingat absen masuk menjelang jam mulai dan absen pulang saat jam kerja
- * selesai. Tiap pengingat dikirim sekali per pegawai per hari.
+ * selesai, serta absen sesi menjelang kuliah. Tiap pengingat dikirim sekali.
  */
 #[Signature('attendance:remind')]
 #[Description('Kirim pengingat absen masuk dan pulang')]
@@ -51,6 +52,26 @@ class SendAttendanceReminders extends Command
                 if ($a?->check_in_at && ! $a->check_out_at && $now->between($outAt, $outAt->addMinutes(30))
                     && Cache::add("remind:out:{$e->id}:$date", 1, now()->addDay())) {
                     $push->send($e, 'Jangan lupa absen pulang', 'Absen pulang di lokasi kampus supaya hari ini tidak tercatat "tidak absen pulang".', ['type' => 'reminder']);
+                    $sent++;
+                }
+            });
+
+        // Fase 3: pengingat absen sesi saat jendela absen kuliah dibuka.
+        $now = CarbonImmutable::now(config('attendance.timezone'));
+        $date = $now->toDateString();
+        TeachingSchedule::occursOn($date)
+            ->with(['course', 'office', 'employee.offices', 'employee.activeDevice'])
+            ->whereHas('employee.user', fn ($q) => $q->where('is_active', true))
+            ->whereHas('employee.activeDevice', fn ($q) => $q->whereNotNull('fcm_token'))
+            ->whereDoesntHave('sessions', fn ($q) => $q->whereDate('date', $date))
+            ->each(function (TeachingSchedule $s) use ($push, $date, &$sent) {
+                $tz = $s->office?->timezone ?? $s->employee->offices->first()?->timezone ?? config('attendance.timezone');
+                $start = $s->startAt($date, $tz);
+                $at = $start->subMinutes(config('attendance.sessions.reminder_before_min'));
+                if (CarbonImmutable::now($tz)->between($at, $start) && Cache::add("remind:session:{$s->id}:$date", 1, now()->addDay())) {
+                    $push->send($s->employee, 'Kuliah '.$s->label.' pukul '.$start->format('H:i'),
+                        'Absen sesi'.($s->room ? " di {$s->room}" : '').' sebelum kuliah dimulai.',
+                        ['type' => 'session', 'id' => (string) $s->id]);
                     $sent++;
                 }
             });

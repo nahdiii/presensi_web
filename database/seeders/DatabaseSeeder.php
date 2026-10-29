@@ -8,9 +8,11 @@ use App\Enums\EmployeeType;
 use App\Enums\UnitType;
 use App\Enums\WorkPatternType;
 use App\Models\CalendarEvent;
+use App\Models\Course;
 use App\Models\Employee;
 use App\Models\Institution;
 use App\Models\Office;
+use App\Models\TeachingSchedule;
 use App\Models\Unit;
 use App\Models\User;
 use App\Models\WorkPattern;
@@ -23,7 +25,8 @@ use Spatie\Permission\Models\Role;
  *   admin@kampus.test     Admin SDM (panel /admin)
  *   dekan.ft@kampus.test  Pimpinan unit Fakultas Teknik (panel + aplikasi)
  *   tendik@kampus.test    Tendik Biro SDM, presensi tetap (aplikasi)
- *   dosen@kampus.test     Dosen Informatika, presensi fleksibel (aplikasi)
+ *   dosen@kampus.test     Dosen Informatika, presensi fleksibel + 2 jadwal mengajar (aplikasi)
+ *   dosen.sesi@kampus.test Dosen Informatika, presensi per sesi mengajar (aplikasi)
  *   demo1..12@kampus.test Pegawai contoh berisi riwayat 2 minggu (hanya di lokal)
  *
  * Koordinat kampus hanya perkiraan; Bagian SDM perlu menyesuaikannya.
@@ -77,8 +80,11 @@ class DatabaseSeeder extends Seeder
 
         $this->employee($inst, 'Siti Aminah, S.E.', 'tendik@kampus.test', '199003152015042001', $bsdm,
             EmployeeType::Tendik, AttendanceType::Fixed, null, [$kampus1]);
-        $this->employee($inst, 'Ahmad Fauzi, M.Kom.', 'dosen@kampus.test', '198805202014041002', $if,
+        $fauzi = $this->employee($inst, 'Ahmad Fauzi, M.Kom.', 'dosen@kampus.test', '198805202014041002', $if,
             EmployeeType::Dosen, AttendanceType::Flexible, $dosen, [$kampus1, $kampus2], nidn: '1120058801');
+        $nur = $this->employee($inst, 'Nur Halimah, M.T.', 'dosen.sesi@kampus.test', '199101102019032005', $if,
+            EmployeeType::Dosen, AttendanceType::Session, null, [$kampus1, $kampus2], nidn: '1110019101');
+        $this->teaching($inst, $if, $kampus2, $fauzi, $nur);
         $this->employee($inst, 'Budi Santoso', 'tendik.ft@kampus.test', '199207012019031003', $ft,
             EmployeeType::Tendik, AttendanceType::Fixed, null, [$kampus2]);
 
@@ -87,6 +93,31 @@ class DatabaseSeeder extends Seeder
 
         if (app()->environment('local')) {
             $this->call(DemoAttendanceSeeder::class);
+        }
+    }
+
+    /** Jadwal mengajar semester ganjil 2026/2027; dosen.sesi punya kuliah setiap hari kerja supaya mudah dicoba. */
+    private function teaching(Institution $inst, Unit $prodi, Office $gedung, Employee $fauzi, Employee $nur): void
+    {
+        $course = fn (string $code, string $name, int $credits) => Course::create([
+            'institution_id' => $inst->id, 'unit_id' => $prodi->id, 'code' => $code, 'name' => $name, 'credits' => $credits,
+        ]);
+        $web = $course('IF201', 'Pemrograman Web', 3);
+        $basisData = $course('IF203', 'Basis Data', 3);
+        $jarkom = $course('IF305', 'Jaringan Komputer', 2);
+        $algo = $course('IF101', 'Algoritma dan Pemrograman', 4);
+
+        $slot = fn (Employee $e, Course $c, string $class, int $weekday, string $start, string $end, ?string $room) => TeachingSchedule::create([
+            'institution_id' => $inst->id, 'employee_id' => $e->id, 'course_id' => $c->id, 'class_name' => $class,
+            'weekday' => $weekday, 'start_time' => $start, 'end_time' => $end, 'office_id' => $gedung->id, 'room' => $room,
+            'valid_from' => '2026-09-01', 'valid_until' => '2027-01-31',
+        ]);
+        $slot($fauzi, $web, 'A', 1, '08:00', '10:30', 'R. 2.04');
+        $slot($fauzi, $basisData, 'B', 3, '13:00', '15:30', 'Lab. Basis Data');
+        foreach (range(1, 5) as $wd) {
+            $slot($nur, $algo, 'A', $wd, '08:00', '09:40', 'R. 1.02');
+            $slot($nur, $jarkom, 'B', $wd, '10:00', '11:40', 'Lab. Jaringan');
+            $slot($nur, $algo, 'C', $wd, '14:00', '15:40', 'R. 1.03');
         }
     }
 

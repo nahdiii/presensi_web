@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\CorrectionController;
 use App\Http\Controllers\Api\V1\LeaveController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\PresenceController;
+use App\Http\Controllers\Api\V1\TeachingController;
 use App\Http\Middleware\EnsureKnownDevice;
 use Illuminate\Support\Facades\Route;
 
@@ -31,6 +32,10 @@ Route::prefix('v1')->group(function () {
         Route::post('exit-permits', [PresenceController::class, 'startPermit']);
         Route::get('corrections', [CorrectionController::class, 'index']);
         Route::post('corrections', [CorrectionController::class, 'store']);
+
+        // Fase 3: presensi per sesi mengajar
+        Route::get('teaching/today', [TeachingController::class, 'today']);
+        Route::get('teaching/history', [TeachingController::class, 'history']);
     });
 
     // Absen tidak memakai EnsureKnownDevice: perangkat dicek di
@@ -40,5 +45,6 @@ Route::prefix('v1')->group(function () {
         Route::post('attendance/check-out', [AttendanceController::class, 'checkOut']);
         Route::post('presence-checks/{presenceCheck}/respond', [PresenceController::class, 'respond'])->whereNumber('presenceCheck');
         Route::post('exit-permits/{exitPermit}/return', [PresenceController::class, 'returnPermit'])->whereNumber('exitPermit');
+        Route::post('teaching/{teachingSchedule}/check-in', [TeachingController::class, 'checkIn'])->whereNumber('teachingSchedule');
     });
 });

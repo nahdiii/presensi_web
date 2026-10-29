@@ -46,7 +46,7 @@ class AdminPanelProvider extends PanelProvider
             ->renderHook(PanelsRenderHook::GLOBAL_SEARCH_AFTER, fn () => view('filament.theme-toggle'))
             ->renderHook(PanelsRenderHook::USER_MENU_AFTER, fn () => view('filament.user-identity'))
             ->renderHook(PanelsRenderHook::SIMPLE_LAYOUT_START, fn () => view('filament.auth-aside'), scopes: Login::class)
-            ->navigationGroups(['Presensi', 'Kepegawaian', 'Pengaturan'])
+            ->navigationGroups(['Presensi', 'Perkuliahan', 'Kepegawaian', 'Pengaturan'])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([])

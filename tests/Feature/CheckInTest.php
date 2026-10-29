@@ -190,6 +190,17 @@ class CheckInTest extends TestCase
             ->assertJsonPath('error.message', 'Absen masuk baru dibuka pukul 06:30.');
     }
 
+    public function test_per_session_lecturer_cannot_use_daily_check_in(): void
+    {
+        $e = $this->makeEmployee(['attendance_type' => \App\Enums\AttendanceType::Session]);
+        $this->at('2026-10-28 08:00');
+
+        $this->punch($e)->assertStatus(422)
+            ->assertJsonPath('error.code', 'outside_window')
+            ->assertJsonPath('error.message', 'Presensi Anda dihitung per sesi mengajar. Absen lewat jadwal mengajar di beranda.');
+        $this->assertSame(0, Attendance::count());
+    }
+
     public function test_check_in_on_day_off_is_rejected(): void
     {
         $e = $this->makeEmployee();

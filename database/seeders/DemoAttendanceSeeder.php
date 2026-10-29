@@ -64,7 +64,8 @@ class DemoAttendanceSeeder extends Seeder
 
         $shifts = app(ShiftResolver::class);
         $today = CarbonImmutable::now($tz)->startOfDay();
-        $employees = Employee::with(['user', 'offices'])->get();
+        // Dosen presensi per sesi tidak punya presensi harian.
+        $employees = Employee::with(['user', 'offices'])->where('attendance_type', '!=', AttendanceType::Session)->get();
 
         foreach (range(14, 0) as $back) {
             $date = $today->subDays($back);

@@ -20,12 +20,13 @@ docker compose exec app php artisan migrate --seed
 - Postgres: `localhost:5434` (user/password/db `presensi`)
 
 Akun contoh ada di `database/seeders/DatabaseSeeder.php` (admin SDM, pimpinan
-Fakultas Teknik, tendik, dosen). Koordinat kampus di seeder hanya perkiraan.
+Fakultas Teknik, tendik, dosen, dan `dosen.sesi@kampus.test` yang presensinya per sesi
+mengajar). Koordinat kampus di seeder hanya perkiraan.
 
 Service `worker` (antrean kompres foto) dan `scheduler` ikut berjalan lewat
 `docker compose up`. Jadwalnya: kirim cek kehadiran acak (tiap menit),
-pengingat absen (tiap 5 menit), tutup hari presensi (23.50 WITA), dan backup
-database (02.00 WITA).
+pengingat absen dan sesi kuliah (tiap 5 menit), tutup hari presensi dan sesi
+mengajar (23.50 WITA), dan backup database (02.00 WITA).
 
 ## Test
 
@@ -50,6 +51,8 @@ semua halaman admin.
 | `app/Services/PresenceCheckService.php` | Cek kehadiran acak: jadwal 1–3 kali/hari, kirim, jawab, tidak merespons |
 | `app/Services/ExitPermitService.php` | Izin keluar sementara (keluar → kembali di radius) |
 | `app/Services/CorrectionService.php` | Koreksi lupa absen; diterapkan saat disetujui |
+| `app/Services/TeachingSessionService.php` | Presensi per sesi mengajar: jadwal hari ini, absen sesi, tutup sesi yang terlewat |
+| `app/Services/TeachingScheduleImporter.php` | Impor jadwal mengajar dari CSV (`,` atau `;`) |
 | `app/Notifications/Push/` | Notifikasi FCM; tanpa kredensial hanya dicatat di log |
 | `app/Exports/MonthlyAttendanceExport.php` | Rekap bulanan .xlsx (ringkasan + rincian harian) |
 | `app/Filament/` | Resource admin, widget dashboard |
@@ -91,6 +94,31 @@ keputusan izin/koreksi. Untuk mengaktifkannya:
 Tanpa FCM, cek kehadiran acak tetap muncul di beranda aplikasi karena beranda
 menyegarkan status setiap menit selama aplikasi terbuka.
 
+## Presensi per sesi mengajar (Fase 3)
+
+Menu **Perkuliahan** di panel admin:
+
+- **Mata Kuliah** dan **Jadwal Mengajar**: jadwal mingguan per dosen selama
+  rentang semester, dengan gedung (opsional) dan ruang. Isi manual atau tombol
+  **Impor CSV** (kolom: `nip, kode_mk, nama_mk, sks, kelas, hari, mulai, selesai,
+  ruang, lokasi, berlaku_mulai, berlaku_sampai`; contoh lewat tombol **Contoh CSV**).
+  Impor ulang memperbarui jadwal yang sama, tidak menduplikasi.
+- **Sesi Mengajar**: hasil absen per sesi (tepat waktu, terlambat, tidak hadir,
+  izin/sakit/tugas luar, libur) beserta selfie, lokasi, dan pokok bahasan.
+  Pimpinan unit melihat dosen di unitnya. Rekap bulanan .xlsx mendapat lembar
+  *Sesi mengajar*.
+
+Aturan: absen sesi dibuka 15 menit sebelum kuliah sampai jam selesai, terlambat
+bila lewat 15 menit dari jam mulai (`config/attendance.php` → `sessions`). Bila
+jadwal punya gedung, absen harus di radius gedung itu. Sesi yang lewat tanpa absen
+ditandai tidak hadir oleh `attendance:close-day`, kecuali hari libur kalender atau
+izin yang disetujui. Pegawai bertipe presensi **Per sesi mengajar** tidak absen
+harian; dosen bertipe lain tetap absen harian dan juga melihat jadwal mengajarnya.
+
+API: `GET /teaching/today`, `POST /teaching/{jadwal}/check-in` (bukti absen +
+`topic` opsional), `GET /teaching/history?month=YYYY-MM`. Jadwal hari ini juga
+ikut di `GET /attendance/today` sebagai `teaching`.
+
 ## Backup
 
 `php artisan backup:database` membuat `pg_dump` ke disk `BACKUP_DISK`
@@ -103,5 +131,6 @@ menyimpan 14 berkas terbaru. Pulihkan dengan
 Sudah: seluruh **Fase 1 (MVP)** dan **Fase 2**: izin/sakit/cuti/tugas luar, izin
 keluar sementara, cek kehadiran acak, koreksi lupa absen, pengingat dan
 notifikasi (perlu kredensial Firebase), laporan pola di dasbor pimpinan, dan
-backup harian. Belum: Fase 3 (presensi per jadwal mengajar/SIAKAD, verifikasi
-Wi-Fi, geofence latar belakang, pencocokan wajah, multi-institusi & langganan).
+backup harian. Dari Fase 3: presensi per sesi mengajar (jadwal manual/CSV).
+Belum: sinkronisasi SIAKAD, verifikasi Wi-Fi, geofence latar belakang,
+pencocokan wajah, multi-institusi & langganan.

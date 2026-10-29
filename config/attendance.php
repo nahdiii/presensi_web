@@ -40,6 +40,14 @@ return [
         'check_out_after_min' => 0,
     ],
 
+    // Presensi per sesi mengajar (fase 3): absen dibuka sebelum jam mulai
+    // kuliah sampai jam selesai; terlambat bila lewat toleransi dari jam mulai.
+    'sessions' => [
+        'open_before_min' => 15,
+        'late_after_min' => 15,
+        'reminder_before_min' => 15,
+    ],
+
     // Disk backup database harian. Di produksi arahkan ke bucket R2 terpisah.
     'backup_disk' => env('BACKUP_DISK', 'local'),
 
