@@ -14,4 +14,14 @@ class EditWorkPattern extends EditRecord
     {
         return [DeleteAction::make()];
     }
+
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        return $data + ['effective_from' => now(config('attendance.timezone'))->toDateString()];
+    }
+
+    protected function afterSave(): void
+    {
+        WorkPatternResource::recordVersion($this->record, $this->data);
+    }
 }

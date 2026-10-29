@@ -25,6 +25,8 @@ final readonly class DaySchedule
         public int $checkinOpenMin = 60,
         public ?int $minDailyMinutes = null,
         public ?string $reason = null,
+        public ?int $versionId = null,
+        public ?string $effectiveFrom = null,
     ) {}
 
     public static function dayOff(string $source, ?string $reason, ?string $patternName = null): self
@@ -48,6 +50,8 @@ final readonly class DaySchedule
             checkinOpenMin: $a['checkin_open_min'] ?? 60,
             minDailyMinutes: $a['min_daily_minutes'] ?? null,
             reason: $a['reason'] ?? null,
+            versionId: $a['version_id'] ?? null,
+            effectiveFrom: $a['effective_from'] ?? null,
         );
     }
 
@@ -67,6 +71,8 @@ final readonly class DaySchedule
             'checkin_open_min' => $this->checkinOpenMin,
             'min_daily_minutes' => $this->minDailyMinutes,
             'reason' => $this->reason,
+            'version_id' => $this->versionId,
+            'effective_from' => $this->effectiveFrom,
         ];
     }
 

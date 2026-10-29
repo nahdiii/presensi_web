@@ -26,7 +26,7 @@ class AdminPanelTest extends TestCase
     {
         return array_map(fn ($p) => [$p], [
             '/admin', '/admin/employees', '/admin/employees/create', '/admin/employees/{employee}/edit',
-            '/admin/units', '/admin/offices', '/admin/work-patterns', '/admin/work-patterns/create', '/admin/work-patterns/{pattern}/edit',
+            '/admin/units', '/admin/offices', '/admin/deduction-rule-sets', '/admin/work-patterns', '/admin/work-patterns/create', '/admin/work-patterns/{pattern}/edit',
             '/admin/schedule-overrides', '/admin/calendar-events', '/admin/attendances', '/admin/leave-requests', '/admin/attendance-attempts',
             '/admin/exit-permits', '/admin/presence-checks', '/admin/attendance-corrections',
             '/admin/teaching-sessions', '/admin/teaching-sessions/{session}', '/admin/teaching-schedules', '/admin/courses',

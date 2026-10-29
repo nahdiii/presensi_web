@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\AttendanceStatus;
 use App\Models\Concerns\BelongsToInstitution;
+use App\Services\DeductionService;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -31,7 +32,18 @@ class Attendance extends Model
             'check_in_accuracy_m' => 'float',
             'check_out_accuracy_m' => 'float',
             'is_early_leave' => 'boolean',
+            'early_leave_minutes' => 'integer',
+            'deduction_percent' => 'decimal:2',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Potongan selalu mengikuti isi baris terakhir; tidak ada yang mengisinya tangan.
+        static::saving(function (Attendance $a) {
+            $a->institution_id ??= $a->employee?->institution_id;
+            app(DeductionService::class)->apply($a);
+        });
     }
 
     public function employee(): BelongsTo
@@ -47,6 +59,11 @@ class Attendance extends Model
     public function checkOutOffice(): BelongsTo
     {
         return $this->belongsTo(Office::class, 'check_out_office_id');
+    }
+
+    public function deductionRuleSet(): BelongsTo
+    {
+        return $this->belongsTo(DeductionRuleSet::class);
     }
 
     public function device(): BelongsTo

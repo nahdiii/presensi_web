@@ -48,6 +48,10 @@ class OfficeResource extends Resource
             TextInput::make('radius_m')->label('Radius (meter)')->numeric()->required()->default(100)->minValue(20)->maxValue(2000),
             Select::make('timezone')->label('Zona waktu')->required()->default('Asia/Makassar')
                 ->options(['Asia/Jakarta' => 'WIB (Asia/Jakarta)', 'Asia/Makassar' => 'WITA (Asia/Makassar)', 'Asia/Jayapura' => 'WIT (Asia/Jayapura)']),
+            Select::make('work_pattern_id')->label('Pola jadwal kampus')->relationship('workPattern', 'name')->preload()
+                ->placeholder('ikut default institusi')
+                ->helperText('Untuk kampus dengan jam masuk/pulang sendiri. Dipakai bila pegawai dan unitnya tidak punya pola jadwal sendiri. '
+                    .'Mengubah jamnya lewat menu Pola Jadwal, dengan tanggal berlaku.'),
             Toggle::make('is_active')->label('Aktif')->default(true),
         ]);
     }
@@ -62,6 +66,7 @@ class OfficeResource extends Resource
                     ->formatStateUsing(fn (Office $r) => "{$r->latitude}, {$r->longitude}")
                     ->url(fn (Office $r) => "https://www.google.com/maps?q={$r->latitude},{$r->longitude}", true),
                 TextColumn::make('radius_m')->label('Radius')->suffix(' m')->sortable(),
+                TextColumn::make('workPattern.name')->label('Pola jadwal')->placeholder('default institusi'),
                 TextColumn::make('employees_count')->label('Pegawai')->counts('employees'),
                 IconColumn::make('is_active')->label('Aktif')->boolean(),
             ])

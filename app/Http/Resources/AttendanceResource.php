@@ -2,11 +2,12 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Attendance;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
 
-/** @mixin \App\Models\Attendance */
+/** @mixin Attendance */
 class AttendanceResource extends JsonResource
 {
     /** Sertakan URL foto bertanda tangan (hanya di endpoint detail). */
@@ -42,6 +43,10 @@ class AttendanceResource extends JsonResource
             'late_minutes' => $this->late_minutes,
             'worked_minutes' => $this->worked_minutes,
             'is_early_leave' => $this->is_early_leave,
+            'early_leave_minutes' => $this->early_leave_minutes,
+            'late_code' => $this->late_code,
+            'early_leave_code' => $this->early_leave_code,
+            'deduction_percent' => (float) $this->deduction_percent,
             'check_in' => $punch('check_in'),
             'check_out' => $punch('check_out'),
             'note' => $this->note,

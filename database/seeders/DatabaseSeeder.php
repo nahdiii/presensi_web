@@ -9,6 +9,7 @@ use App\Enums\UnitType;
 use App\Enums\WorkPatternType;
 use App\Models\CalendarEvent;
 use App\Models\Course;
+use App\Models\DeductionRuleSet;
 use App\Models\Employee;
 use App\Models\Institution;
 use App\Models\Office;
@@ -54,6 +55,10 @@ class DatabaseSeeder extends Seeder
         ]);
         $this->pattern($inst, 'Satpam Malam', WorkPatternType::Fixed, tolerance: 10, open: 30, days: array_fill(1, 7, ['22:00', '06:00']));
         $inst->update(['default_work_pattern_id' => $tendik->id]);
+        DeductionRuleSet::create(DeductionRuleSet::defaults() + [
+            'institution_id' => $inst->id, 'effective_from' => '2000-01-01',
+            'note' => 'Contoh TL/PSW 1–4 — sesuaikan dengan peraturan institusi',
+        ]);
 
         $kampus1 = Office::create([
             'institution_id' => $inst->id, 'name' => 'Kampus 1',
@@ -139,6 +144,7 @@ class DatabaseSeeder extends Seeder
                 'is_day_off' => $d === null,
             ]);
         }
+        $pattern->recordVersion('2000-01-01', 'Jadwal awal');
 
         return $pattern;
     }

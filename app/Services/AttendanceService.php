@@ -138,18 +138,13 @@ class AttendanceService
             $this->assertFace($p);
 
             $photo = $this->storePhoto($employee, $p, $date, 'out');
-            $checkIn = CarbonImmutable::instance($attendance->check_in_at)->setTimezone($tz);
-            $worked = (int) $checkIn->diffInMinutes($now) - $schedule->breakOverlapMinutes($date, $tz, $checkIn, $now);
-            $early = $schedule->isFlexible()
-                ? $worked < ($schedule->minDailyMinutes ?? 0)
-                : $now->lt($schedule->endAt($date, $tz));
 
-            DB::transaction(function () use ($attendance, $office, $now, $p, $distance, $photo, $worked, $early) {
+            DB::transaction(function () use ($attendance, $office, $now, $p, $distance, $photo, $schedule, $tz) {
                 $row = Attendance::whereKey($attendance->id)->lockForUpdate()->first();
                 if ($row->check_out_at) {
                     throw new AttendanceRejected(RejectReason::AlreadyCheckedOut, 'Anda sudah absen pulang hari ini.');
                 }
-                $row->update([
+                $row->fill([
                     'check_out_office_id' => $office->id,
                     'check_out_at' => $now->utc(),
                     'check_out_lat' => $p->lat,
@@ -157,9 +152,9 @@ class AttendanceService
                     'check_out_accuracy_m' => $p->accuracy,
                     'check_out_distance_m' => round($distance, 2),
                     'check_out_photo_path' => $photo,
-                    'worked_minutes' => max(0, $worked),
-                    'is_early_leave' => $early,
                 ]);
+                $this->applyTimes($row, $schedule, $tz);
+                $row->save();
             });
 
             $this->queuePhoto($photo);
@@ -193,6 +188,40 @@ class AttendanceService
             : $this->nextAction($attendance, $schedule, $date, $tz, $now);
 
         return compact('date', 'now', 'tz', 'schedule', 'attendance', 'action', 'message');
+    }
+
+    /**
+     * Status, menit terlambat, total hadir, dan menit pulang cepat dari jam
+     * absen masuk/pulang dan jadwal hari itu. Semua angka ini selalu dihitung
+     * di sini — tidak pernah diisi tangan — supaya ikut berubah bila jadwalnya
+     * berubah. Dipakai saat absen pulang, koreksi, dan hitung ulang.
+     */
+    public function applyTimes(Attendance $row, DaySchedule $schedule, string $tz): void
+    {
+        if (! $row->check_in_at) {
+            return;
+        }
+        $date = $row->date->toDateString();
+        $in = CarbonImmutable::instance($row->check_in_at)->setTimezone($tz);
+        [$status, $late] = $schedule->isDayOff
+            ? [AttendanceStatus::Present, 0]
+            : $this->resolveStatus($schedule, $date, $tz, $in);
+        $values = ['late_minutes' => $late, 'worked_minutes' => 0, 'is_early_leave' => false, 'early_leave_minutes' => 0];
+
+        if ($row->check_out_at) {
+            $out = CarbonImmutable::instance($row->check_out_at)->setTimezone($tz);
+            $worked = max(0, (int) $in->diffInMinutes($out) - $schedule->breakOverlapMinutes($date, $tz, $in, $out));
+            $early = match (true) {
+                $schedule->isDayOff => 0,
+                $schedule->isFlexible() => max(0, ($schedule->minDailyMinutes ?? 0) - $worked),
+                default => $out->lt($end = $schedule->endAt($date, $tz)) ? (int) $out->diffInMinutes($end) : 0,
+            };
+            $values = ['late_minutes' => $late, 'worked_minutes' => $worked, 'is_early_leave' => $early > 0, 'early_leave_minutes' => $early];
+        } elseif ($row->status === AttendanceStatus::Incomplete) {
+            $status = AttendanceStatus::Incomplete; // Sudah ditutup tutup hari: tetap tidak absen pulang.
+        }
+
+        $row->fill(['status' => $status] + $values);
     }
 
     /** Status masuk dan menit terlambat, dihitung dari jam mulai shift. */
@@ -271,6 +300,7 @@ class AttendanceService
                 if ($a->date->toDateString() === $now->toDateString()) {
                     return true;
                 }
+
                 // Shift kemarin hanya dianggap masih terbuka bila melewati tengah malam.
                 return DaySchedule::fromArray($a->schedule_snapshot)->crossesMidnight();
             });

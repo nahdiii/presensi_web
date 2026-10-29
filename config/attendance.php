@@ -60,4 +60,8 @@ return [
 
     // Batas umur koreksi lupa absen (hari ke belakang).
     'correction_max_days' => 30,
+
+    // Perubahan jam kerja / aturan potongan boleh berlaku mundur paling jauh
+    // sekian hari; presensi pada rentang itu dihitung ulang otomatis.
+    'recalculate_max_days' => 62,
 ];

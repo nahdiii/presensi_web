@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Enums\AttendanceStatus;
 use App\Enums\LeaveStatus;
 use App\Models\Attendance;
 use App\Models\AttendanceCorrection;
@@ -69,11 +68,7 @@ class CorrectionService
                 : $this->shifts->resolve($employee, $date);
 
             if ($c->check_in_time) {
-                $in = CarbonImmutable::parse("$date {$c->check_in_time}", $tz);
-                [$status, $late] = $schedule->isDayOff
-                    ? [AttendanceStatus::Present, 0]
-                    : $this->attendance->resolveStatus($schedule, $date, $tz, $in);
-                $row->fill(['check_in_at' => $in->utc(), 'status' => $status, 'late_minutes' => $late]);
+                $row->check_in_at = CarbonImmutable::parse("$date {$c->check_in_time}", $tz)->utc();
             }
             if ($c->check_out_time && $row->check_in_at) {
                 $in = CarbonImmutable::instance($row->check_in_at)->setTimezone($tz);
@@ -81,19 +76,9 @@ class CorrectionService
                 if ($out->lte($in)) {
                     $out = $out->addDay(); // shift lewat tengah malam
                 }
-                $worked = (int) $in->diffInMinutes($out) - $schedule->breakOverlapMinutes($date, $tz, $in, $out);
-                $row->fill([
-                    'check_out_at' => $out->utc(),
-                    'worked_minutes' => max(0, $worked),
-                    'is_early_leave' => $schedule->isFlexible()
-                        ? $worked < ($schedule->minDailyMinutes ?? 0)
-                        : (! $schedule->isDayOff && $out->lt($schedule->endAt($date, $tz))),
-                ]);
-                if ($row->status === AttendanceStatus::Incomplete) {
-                    [$status] = $this->attendance->resolveStatus($schedule, $date, $tz, $in);
-                    $row->status = $status;
-                }
+                $row->check_out_at = $out->utc();
             }
+            $this->attendance->applyTimes($row, $schedule, $tz);
             $row->fill([
                 'schedule_snapshot' => $schedule->toArray(),
                 'note' => "$label: ".str($c->reason)->limit(150),

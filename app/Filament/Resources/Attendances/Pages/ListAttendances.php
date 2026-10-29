@@ -4,7 +4,9 @@ namespace App\Filament\Resources\Attendances\Pages;
 
 use App\Exports\MonthlyAttendanceExport;
 use App\Filament\Resources\Attendances\AttendanceResource;
+use App\Jobs\RecalculateAttendances;
 use App\Models\Employee;
+use App\Models\Unit;
 use App\Services\CorrectionService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -22,7 +24,7 @@ class ListAttendances extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        return [self::manualAction(), self::exportAction()];
+        return [self::manualAction(), self::recalculateAction(), self::exportAction()];
     }
 
     /** Admin SDM mencatat presensi pegawai yang tidak bisa absen lewat aplikasi (HP rusak/hilang, gangguan). */
@@ -51,6 +53,40 @@ class ListAttendances extends ListRecords
                     $data['reason'], auth()->user(),
                 );
                 Notification::make()->title('Presensi dicatat')->success()->send();
+            });
+    }
+
+    /**
+     * Hitung ulang terlambat, pulang cepat, dan potongan dengan jadwal yang
+     * berlaku sekarang — mis. setelah pola jadwal unit/pegawai/kampus diganti
+     * atau kalender libur diperbaiki. Perubahan jam lewat Pola Jadwal dan
+     * aturan potongan baru sudah memicu hitung ulang sendiri.
+     */
+    public static function recalculateAction(): Action
+    {
+        $tz = config('attendance.timezone');
+
+        return Action::make('recalculate')->label('Hitung ulang')->icon(Heroicon::OutlinedArrowPath)->color('gray')
+            ->visible(fn () => auth()->user()->isAdmin())
+            ->modalDescription('Menit terlambat, pulang cepat, dan potongan dihitung ulang dari jam absen dan jadwal yang berlaku pada tiap tanggal. '
+                .'Jam absen pegawai tidak diubah.')
+            ->schema([
+                DatePicker::make('from')->label('Dari')->required()->native(false)
+                    ->minDate(now($tz)->subDays(config('attendance.recalculate_max_days'))->toDateString())
+                    ->maxDate(now($tz)->toDateString())->default(now($tz)->startOfMonth()->toDateString()),
+                DatePicker::make('until')->label('Sampai')->required()->native(false)->afterOrEqual('from')
+                    ->maxDate(now($tz)->toDateString())->default(now($tz)->toDateString()),
+                Select::make('unit_id')->label('Unit')->placeholder('Semua unit')->searchable()
+                    ->options(fn () => Unit::orderBy('name')->pluck('name', 'id')->all()),
+            ])
+            ->modalSubmitActionLabel('Hitung ulang')
+            ->action(function (array $data) {
+                $unit = isset($data['unit_id']) ? Unit::find($data['unit_id']) : null;
+                RecalculateAttendances::dispatch(auth()->user()->institution_id, $data['from'], $data['until'],
+                    'Hitung ulang '.($unit?->name ?? 'semua unit'),
+                    $unit ? Employee::whereIn('unit_id', $unit->descendantIds())->pluck('id')->all() : null,
+                    auth()->id());
+                Notification::make()->title('Hitung ulang dimulai')->body('Anda akan diberi tahu bila sudah selesai.')->info()->send();
             });
     }
 

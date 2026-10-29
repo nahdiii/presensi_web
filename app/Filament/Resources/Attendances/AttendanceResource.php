@@ -9,6 +9,7 @@ use App\Filament\Resources\Attendances\Pages\ViewAttendance;
 use App\Models\Attendance;
 use App\Models\Unit;
 use BackedEnum;
+use Carbon\Carbon;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Infolists\Components\ImageEntry;
@@ -50,7 +51,18 @@ class AttendanceResource extends Resource
 
     private static function time(?\DateTimeInterface $at, Attendance $r): ?string
     {
-        return $at ? \Carbon\Carbon::instance($at)->setTimezone($r->checkInOffice?->timezone ?? config('attendance.timezone'))->format('H:i') : null;
+        return $at ? Carbon::instance($at)->setTimezone($r->checkInOffice?->timezone ?? config('attendance.timezone'))->format('H:i') : null;
+    }
+
+    public static function percent($value): string
+    {
+        return rtrim(rtrim(number_format((float) $value, 2, ',', '.'), '0'), ',').'%';
+    }
+
+    /** Kode TL/PSW hari itu, mis. "TL2 · PSW1". */
+    public static function codes(Attendance $r): ?string
+    {
+        return collect([$r->late_code, $r->early_leave_code])->filter()->implode(' · ') ?: null;
     }
 
     public static function table(Table $table): Table
@@ -73,8 +85,12 @@ class AttendanceResource extends Resource
                     ->color(fn ($state) => $state > 0 ? 'warning' : null),
                 TextColumn::make('worked_minutes')->label('Hadir')
                     ->formatStateUsing(fn ($state) => $state ? intdiv($state, 60).'j '.($state % 60).'m' : '-'),
-                TextColumn::make('early_leave_note')->label('Catatan')->badge()->color('warning')
-                    ->state(fn (Attendance $r) => $r->is_early_leave ? 'Pulang awal' : null)->toggleable(),
+                TextColumn::make('early_leave_minutes')->label('Pulang cepat')->suffix(' mnt')->sortable()
+                    ->color(fn ($state) => $state > 0 ? 'warning' : null)->toggleable(),
+                TextColumn::make('deduction_percent')->label('Potongan')
+                    ->formatStateUsing(fn ($state) => (float) $state > 0 ? self::percent($state) : '-')
+                    ->description(fn (Attendance $r) => self::codes($r))
+                    ->color(fn ($state) => (float) $state > 0 ? 'danger' : null)->sortable(),
                 TextColumn::make('check_in_distance_m')->label('Jarak masuk')->suffix(' m')->numeric(0)->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
@@ -110,10 +126,16 @@ class AttendanceResource extends Resource
                 TextEntry::make('date')->label('Tanggal')->date('l, d M Y'),
                 TextEntry::make('status')->badge(),
                 TextEntry::make('schedule_snapshot')->label('Jadwal berlaku')
-                    ->state(fn (Attendance $r) => ($s = $r->schedule_snapshot) ? (($s['is_day_off'] ?? false) ? 'Libur' : ($s['pattern_name'] ?? '').' '.$s['start_time'].'–'.$s['end_time']) : '-'),
+                    ->state(fn (Attendance $r) => ($s = $r->schedule_snapshot) ? (($s['is_day_off'] ?? false) ? 'Libur' : ($s['pattern_name'] ?? '').' '.$s['start_time'].'–'.$s['end_time']) : '-')
+                    ->helperText(fn (Attendance $r) => ($from = $r->schedule_snapshot['effective_from'] ?? null)
+                        ? 'Jam versi berlaku mulai '.Carbon::parse($from)->translatedFormat('d M Y') : null),
                 TextEntry::make('late_minutes')->label('Terlambat')->suffix(' menit'),
                 TextEntry::make('worked_minutes')->label('Total hadir')->suffix(' menit'),
-                TextEntry::make('is_early_leave')->label('Pulang awal')->formatStateUsing(fn ($s) => $s ? 'Ya' : 'Tidak'),
+                TextEntry::make('early_leave_minutes')->label('Pulang cepat')->suffix(' menit'),
+                TextEntry::make('deduction_percent')->label('Potongan hari ini')
+                    ->formatStateUsing(fn ($state, Attendance $r) => self::percent($state).(($c = self::codes($r)) ? " ($c)" : ''))
+                    ->helperText(fn (Attendance $r) => $r->deductionRuleSet
+                        ? 'Aturan berlaku mulai '.$r->deductionRuleSet->effective_from->translatedFormat('d M Y') : 'Belum ada aturan potongan'),
                 TextEntry::make('note')->label('Catatan')->placeholder('-'),
             ]),
             Section::make('Absen masuk')->components([
