@@ -41,7 +41,11 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->sidebarWidth('18rem')
             ->maxContentWidth(Width::Full)
+            // Pindah halaman tanpa reload penuh: hanya isi halaman yang diganti,
+            // dan halaman sudah dimuat di latar saat kursor di atas menu.
+            ->spa(hasPrefetching: true)
             ->renderHook(PanelsRenderHook::HEAD_END, fn () => view('filament.styles'))
+            ->renderHook(PanelsRenderHook::HEAD_END, fn () => view('filament.spa'))
             ->renderHook(PanelsRenderHook::TOPBAR_LOGO_AFTER, fn () => view('filament.topbar-context'))
             ->renderHook(PanelsRenderHook::GLOBAL_SEARCH_AFTER, fn () => view('filament.theme-toggle'))
             ->renderHook(PanelsRenderHook::USER_MENU_AFTER, fn () => view('filament.user-identity'))
