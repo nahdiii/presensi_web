@@ -104,7 +104,7 @@ class AttendanceController extends Controller
             ->put('worked_minutes', (int) $items->sum('worked_minutes'))
             ->put('late_minutes', (int) $items->sum('late_minutes'))
             ->put('early_leave_minutes', (int) $items->sum('early_leave_minutes'))
-            ->put('deduction_percent', round((float) $items->sum(fn ($a) => (float) $a->deduction_percent), 2));
+            ->put('deduction_amount', (int) $items->sum('deduction_amount'));
 
         return response()->json(['data' => [
             'month' => $month->format('Y-m'),

@@ -46,7 +46,7 @@ class AttendanceResource extends JsonResource
             'early_leave_minutes' => $this->early_leave_minutes,
             'late_code' => $this->late_code,
             'early_leave_code' => $this->early_leave_code,
-            'deduction_percent' => (float) $this->deduction_percent,
+            'deduction_amount' => $this->deduction_amount,
             'check_in' => $punch('check_in'),
             'check_out' => $punch('check_out'),
             'note' => $this->note,

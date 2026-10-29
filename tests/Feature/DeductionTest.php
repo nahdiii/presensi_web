@@ -65,7 +65,7 @@ class DeductionTest extends TestCase
         $a = $this->row($e);
         $this->assertSame(40, $a->late_minutes);
         $this->assertSame('TL2', $a->late_code);
-        $this->assertEquals(1.0, $a->deduction_percent);
+        $this->assertSame(10000, $a->deduction_amount);
 
         $this->at('2026-10-28 15:35'); // 25 menit sebelum jam pulang → PSW1
         $this->punch($e, 'out')->assertOk();
@@ -73,7 +73,7 @@ class DeductionTest extends TestCase
         $this->assertTrue($a->is_early_leave);
         $this->assertSame(25, $a->early_leave_minutes);
         $this->assertSame('PSW1', $a->early_leave_code);
-        $this->assertEquals(1.5, $a->deduction_percent);
+        $this->assertSame(15000, $a->deduction_amount); // TL2 Rp10.000 + PSW1 Rp5.000
     }
 
     public function test_arriving_within_tolerance_and_leaving_on_time_has_no_deduction(): void
@@ -89,7 +89,7 @@ class DeductionTest extends TestCase
         $this->assertSame(AttendanceStatus::Present, $a->status);
         $this->assertNull($a->late_code);
         $this->assertNull($a->early_leave_code);
-        $this->assertEquals(0, $a->deduction_percent);
+        $this->assertSame(0, $a->deduction_amount);
     }
 
     public function test_no_checkout_absent_and_leave(): void
@@ -112,15 +112,15 @@ class DeductionTest extends TestCase
         $this->assertSame(AttendanceStatus::Incomplete, $a->status);
         $this->assertSame('TL1', $a->late_code);
         $this->assertSame(DeductionRuleSet::NO_CHECKOUT_CODE, $a->early_leave_code);
-        $this->assertEquals(2.0, $a->deduction_percent); // 0,5 + 1,5
-        $this->assertEquals(5.0, $this->row($absent)->deduction_percent);
-        $this->assertEquals(0, $this->row($sick)->deduction_percent);
+        $this->assertSame(25000, $a->deduction_amount); // TL1 Rp5.000 + TAP Rp20.000
+        $this->assertSame(50000, $this->row($absent)->deduction_amount);
+        $this->assertSame(0, $this->row($sick)->deduction_amount);
     }
 
     public function test_daily_deduction_is_capped_at_absent_deduction(): void
     {
         DeductionRuleSet::create([
-            'institution_id' => $this->inst->id, 'effective_from' => '2026-10-01', 'absent_percent' => 2,
+            'institution_id' => $this->inst->id, 'effective_from' => '2026-10-01', 'absent_amount' => 30000,
         ] + DeductionRuleSet::defaults());
         $this->at('2026-10-28 06:00');
         $e = $this->makeEmployee();
@@ -129,14 +129,14 @@ class DeductionTest extends TestCase
         $this->at('2026-10-28 14:00'); // PSW4 1,5%
         $this->punch($e, 'out')->assertOk();
 
-        $this->assertEquals(2.0, $this->row($e)->deduction_percent);
+        $this->assertSame(30000, $this->row($e)->deduction_amount); // TL4 + PSW4 = Rp40.000, dibatasi Rp30.000
     }
 
     public function test_rules_apply_by_attendance_date(): void
     {
         DeductionRuleSet::create([
             'institution_id' => $this->inst->id, 'effective_from' => '2026-10-29',
-            'late_tiers' => [['code' => 'TL1', 'from' => 1, 'to' => null, 'percent' => 3]],
+            'late_tiers' => [['code' => 'TL1', 'from' => 1, 'to' => null, 'amount' => 25000]],
         ] + DeductionRuleSet::defaults());
         $this->at('2026-10-28 06:00');
         $e = $this->makeEmployee();
@@ -145,8 +145,8 @@ class DeductionTest extends TestCase
             $this->punch($e)->assertCreated();
         }
 
-        $this->assertEquals(0.5, $this->row($e, '2026-10-28')->deduction_percent); // aturan lama
-        $this->assertEquals(3.0, $this->row($e, '2026-10-29')->deduction_percent); // aturan baru
+        $this->assertSame(5000, $this->row($e, '2026-10-28')->deduction_amount); // aturan lama
+        $this->assertSame(25000, $this->row($e, '2026-10-29')->deduction_amount); // aturan baru
     }
 
     public function test_future_dated_hours_change_does_not_affect_today(): void
@@ -187,7 +187,7 @@ class DeductionTest extends TestCase
         $this->assertSame(AttendanceStatus::Present, $a->status); // 10 menit, masih dalam toleransi
         $this->assertSame(0, $a->late_minutes);
         $this->assertSame(0, $a->early_leave_minutes);
-        $this->assertEquals(0, $a->deduction_percent);
+        $this->assertSame(0, $a->deduction_amount);
         $this->assertSame('08:00', $a->schedule_snapshot['start_time']);
         // Hari sebelum tanggal berlaku tetap memakai jam lama.
         $this->assertSame('TL2', $this->row($e, '2026-10-27')->late_code);
@@ -222,7 +222,7 @@ class DeductionTest extends TestCase
 
         $a = $this->row($tendik);
         $this->assertSame(AttendanceStatus::Present, $a->status);
-        $this->assertEquals(0, $a->deduction_percent);
+        $this->assertSame(0, $a->deduction_amount);
         $this->assertSame(1, $admin->notifications()->count()); // kabar hitung ulang selesai
 
         // Simpan lagi tanpa mengubah jam: tidak menambah riwayat.

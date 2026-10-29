@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToInstitution;
+use App\Support\Rupiah;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Model;
@@ -14,8 +15,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * versi jadwal, aturan tidak diubah: perubahan selalu dicatat sebagai aturan
  * baru sehingga potongan bulan lalu tetap bisa ditelusuri.
  *
- * Setiap tingkat: {code, from, to, percent}; menit di antara from dan to
- * (inklusif) kena persen itu; to kosong berarti tanpa batas atas.
+ * Potongan berupa nominal rupiah tetap per kejadian. Setiap tingkat:
+ * {code, from, to, amount}; menit di antara from dan to (inklusif) kena
+ * nominal itu; to kosong berarti tanpa batas atas.
  */
 #[Guarded(['id'])]
 class DeductionRuleSet extends Model
@@ -31,8 +33,8 @@ class DeductionRuleSet extends Model
             'effective_from' => 'date',
             'late_tiers' => 'array',
             'early_leave_tiers' => 'array',
-            'no_checkout_percent' => 'decimal:2',
-            'absent_percent' => 'decimal:2',
+            'no_checkout_amount' => 'integer',
+            'absent_amount' => 'integer',
         ];
     }
 
@@ -49,7 +51,7 @@ class DeductionRuleSet extends Model
             ->first();
     }
 
-    /** @return array{code: string, from: int, to: ?int, percent: float|string}|null */
+    /** @return array{code: string, from: int, to: ?int, amount: int|string}|null */
     public static function tierFor(array $tiers, int $minutes): ?array
     {
         if ($minutes <= 0) {
@@ -60,29 +62,29 @@ class DeductionRuleSet extends Model
             && ($t['to'] === null || $t['to'] === '' || $minutes <= (int) $t['to']));
     }
 
-    /** Contoh umum TL/PSW 1–4. Sesuaikan dengan peraturan institusi. */
+    /** Contoh nominal TL/PSW 1–4. Sesuaikan dengan peraturan institusi. */
     public static function defaults(): array
     {
         $tiers = fn (string $p) => [
-            ['code' => "{$p}1", 'from' => 1, 'to' => 30, 'percent' => 0.5],
-            ['code' => "{$p}2", 'from' => 31, 'to' => 60, 'percent' => 1],
-            ['code' => "{$p}3", 'from' => 61, 'to' => 90, 'percent' => 1.25],
-            ['code' => "{$p}4", 'from' => 91, 'to' => null, 'percent' => 1.5],
+            ['code' => "{$p}1", 'from' => 1, 'to' => 30, 'amount' => 5000],
+            ['code' => "{$p}2", 'from' => 31, 'to' => 60, 'amount' => 10000],
+            ['code' => "{$p}3", 'from' => 61, 'to' => 90, 'amount' => 15000],
+            ['code' => "{$p}4", 'from' => 91, 'to' => null, 'amount' => 20000],
         ];
 
         return [
             'late_tiers' => $tiers('TL'),
             'early_leave_tiers' => $tiers('PSW'),
-            'no_checkout_percent' => 1.5,
-            'absent_percent' => 5,
+            'no_checkout_amount' => 20000,
+            'absent_amount' => 50000,
         ];
     }
 
     public function summary(): string
     {
-        $fmt = fn (array $tiers) => collect($tiers)->map(fn ($t) => "{$t['code']} {$t['percent']}%")->implode(', ');
+        $fmt = fn (array $tiers) => collect($tiers)->map(fn ($t) => $t['code'].' '.Rupiah::format($t['amount'] ?? 0))->implode(', ');
 
         return 'Terlambat: '.$fmt($this->late_tiers).' · Pulang cepat: '.$fmt($this->early_leave_tiers)
-            .' · Tidak absen pulang: '.(float) $this->no_checkout_percent.'% · Alpa: '.(float) $this->absent_percent.'%';
+            .' · Tidak absen pulang: '.Rupiah::format($this->no_checkout_amount).' · Alpa: '.Rupiah::format($this->absent_amount);
     }
 }

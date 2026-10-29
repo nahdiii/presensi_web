@@ -61,7 +61,7 @@ class MonthlyAttendanceExport implements WithMultipleSheets
     {
         return ['NIP', 'NIDN', 'Nama', 'Jenis', 'Unit', 'Hari tercatat', 'Tepat waktu', 'Terlambat', 'Total menit terlambat',
             'Tidak absen pulang', 'Alpa', 'Izin/Cuti', 'Sakit', 'Tugas luar', 'Pulang awal', 'Total menit pulang cepat',
-            'Total jam hadir', 'Rata-rata jam/hari hadir', 'Rincian kode potongan', 'Total potongan (%)'];
+            'Total jam hadir', 'Rata-rata jam/hari hadir', 'Rincian kode potongan', 'Total potongan (Rp)'];
     }
 
     /** @param Collection<int, Collection<int, Attendance>> $byEmployee */
@@ -81,7 +81,7 @@ class MonthlyAttendanceExport implements WithMultipleSheets
                 $count(AttendanceStatus::Sick), $count(AttendanceStatus::Duty), $rows->where('is_early_leave', true)->count(),
                 (int) $rows->sum('early_leave_minutes'),
                 round($worked / 60, 2), $attended ? round($worked / 60 / $attended, 2) : 0,
-                $this->codeSummary($rows), round((float) $rows->sum(fn (Attendance $a) => (float) $a->deduction_percent), 2),
+                $this->codeSummary($rows), (int) $rows->sum('deduction_amount'),
             ];
         })->all();
     }
@@ -91,7 +91,7 @@ class MonthlyAttendanceExport implements WithMultipleSheets
     {
         return $rows->flatMap(fn (Attendance $a) => array_filter([
             $a->late_code, $a->early_leave_code,
-            $a->status === AttendanceStatus::Absent && (float) $a->deduction_percent > 0 ? 'Alpa' : null,
+            $a->status === AttendanceStatus::Absent && $a->deduction_amount > 0 ? 'Alpa' : null,
         ]))->countBy()->sortKeys()->map(fn ($n, $code) => "{$code}×{$n}")->implode(', ');
     }
 
@@ -122,7 +122,7 @@ class MonthlyAttendanceExport implements WithMultipleSheets
     private function detailHeadings(): array
     {
         return ['Tanggal', 'NIP', 'Nama', 'Unit', 'Status', 'Jadwal', 'Masuk', 'Lokasi masuk', 'Jarak masuk (m)',
-            'Pulang', 'Lokasi pulang', 'Terlambat (menit)', 'Hadir (menit)', 'Pulang cepat (menit)', 'Kode potongan', 'Potongan (%)', 'Catatan'];
+            'Pulang', 'Lokasi pulang', 'Terlambat (menit)', 'Hadir (menit)', 'Pulang cepat (menit)', 'Kode potongan', 'Potongan (Rp)', 'Catatan'];
     }
 
     private function detailRows(Collection $employees, Collection $byEmployee): array
@@ -139,7 +139,7 @@ class MonthlyAttendanceExport implements WithMultipleSheets
                     $a->check_in_at?->setTimezone($tz)->format('H:i'), $a->checkInOffice?->name, $a->check_in_distance_m,
                     $a->check_out_at?->setTimezone($a->checkOutOffice?->timezone ?? $tz)->format('H:i'), $a->checkOutOffice?->name,
                     $a->late_minutes, $a->worked_minutes, $a->early_leave_minutes,
-                    collect([$a->late_code, $a->early_leave_code])->filter()->implode(', '), (float) $a->deduction_percent, $a->note,
+                    collect([$a->late_code, $a->early_leave_code])->filter()->implode(', '), $a->deduction_amount, $a->note,
                 ];
             }
         }

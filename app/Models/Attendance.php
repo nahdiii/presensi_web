@@ -33,7 +33,7 @@ class Attendance extends Model
             'check_out_accuracy_m' => 'float',
             'is_early_leave' => 'boolean',
             'early_leave_minutes' => 'integer',
-            'deduction_percent' => 'decimal:2',
+            'deduction_amount' => 'integer',
         ];
     }
 

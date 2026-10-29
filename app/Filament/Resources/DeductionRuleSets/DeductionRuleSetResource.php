@@ -29,7 +29,7 @@ class DeductionRuleSetResource extends Resource
 
     protected static ?string $model = DeductionRuleSet::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedReceiptPercent;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
 
     protected static ?string $modelLabel = 'aturan potongan';
 
@@ -47,12 +47,14 @@ class DeductionRuleSetResource extends Resource
     {
         $latest = DeductionRuleSet::latest('effective_from')->latest('id')->first();
 
-        return $latest?->only(['late_tiers', 'early_leave_tiers', 'no_checkout_percent', 'absent_percent']) ?? DeductionRuleSet::defaults();
+        return $latest?->only(['late_tiers', 'early_leave_tiers', 'no_checkout_amount', 'absent_amount']) ?? DeductionRuleSet::defaults();
     }
 
     public static function form(Schema $schema): Schema
     {
         $tz = config('attendance.timezone');
+        $rupiah = fn (string $name, string $label) => TextInput::make($name)->label($label)
+            ->numeric()->integer()->minValue(0)->prefix('Rp')->placeholder('5000');
         $tiers = fn (string $name, string $label, string $prefix) => Repeater::make($name)->label($label)
             ->default(fn () => self::startingValues()[$name])
             ->columns(4)->reorderable(false)->minItems(1)->addActionLabel('Tambah tingkat')
@@ -62,12 +64,12 @@ class DeductionRuleSetResource extends Resource
                 TextInput::make('from')->label('Dari menit ke-')->numeric()->integer()->required()->minValue(1),
                 TextInput::make('to')->label('Sampai menit ke-')->numeric()->integer()->gte('from')
                     ->placeholder('tanpa batas'),
-                TextInput::make('percent')->label('Potongan')->numeric()->required()->minValue(0)->maxValue(100)->suffix('%'),
+                $rupiah('amount', 'Potongan')->required(),
             ]);
 
         return $schema->components([
             Section::make('Berlaku mulai')->columns(2)->columnSpanFull()
-                ->description('Aturan dipakai mulai tanggal ini sampai ada aturan baru. Bila tanggalnya hari ini atau sudah lewat, '
+                ->description('Potongan berupa nominal rupiah per kejadian. Aturan dipakai mulai tanggal ini sampai ada aturan baru. Bila tanggalnya hari ini atau sudah lewat, '
                     .'potongan presensi sejak tanggal itu dihitung ulang otomatis.')
                 ->components([
                     DatePicker::make('effective_from')->label('Berlaku mulai')->native(false)->required()
@@ -83,12 +85,10 @@ class DeductionRuleSetResource extends Resource
                 ->description('Menit dihitung dari jam pulang yang berlaku hari itu. Untuk pola fleksibel: kekurangan dari minimal jam hadir.')
                 ->components([$tiers('early_leave_tiers', 'Tingkat', 'PSW')]),
             Section::make('Lainnya')->columns(2)->columnSpanFull()->components([
-                TextInput::make('no_checkout_percent')->label('Tidak absen pulang ('.DeductionRuleSet::NO_CHECKOUT_CODE.')')
-                    ->numeric()->required()->minValue(0)->maxValue(100)->suffix('%')
-                    ->default(fn () => self::startingValues()['no_checkout_percent']),
-                TextInput::make('absent_percent')->label('Alpa (tidak masuk tanpa keterangan)')
-                    ->numeric()->required()->minValue(0)->maxValue(100)->suffix('%')
-                    ->default(fn () => self::startingValues()['absent_percent'])
+                $rupiah('no_checkout_amount', 'Tidak absen pulang ('.DeductionRuleSet::NO_CHECKOUT_CODE.')')->required()
+                    ->default(fn () => self::startingValues()['no_checkout_amount']),
+                $rupiah('absent_amount', 'Alpa (tidak masuk tanpa keterangan)')->required()
+                    ->default(fn () => self::startingValues()['absent_amount'])
                     ->helperText('Juga batas atas potongan satu hari (terlambat + pulang cepat).'),
             ]),
         ]);

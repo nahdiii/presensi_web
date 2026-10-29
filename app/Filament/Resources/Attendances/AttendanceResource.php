@@ -8,6 +8,7 @@ use App\Filament\Resources\Attendances\Pages\ListAttendances;
 use App\Filament\Resources\Attendances\Pages\ViewAttendance;
 use App\Models\Attendance;
 use App\Models\Unit;
+use App\Support\Rupiah;
 use BackedEnum;
 use Carbon\Carbon;
 use Filament\Actions\ViewAction;
@@ -54,11 +55,6 @@ class AttendanceResource extends Resource
         return $at ? Carbon::instance($at)->setTimezone($r->checkInOffice?->timezone ?? config('attendance.timezone'))->format('H:i') : null;
     }
 
-    public static function percent($value): string
-    {
-        return rtrim(rtrim(number_format((float) $value, 2, ',', '.'), '0'), ',').'%';
-    }
-
     /** Kode TL/PSW hari itu, mis. "TL2 · PSW1". */
     public static function codes(Attendance $r): ?string
     {
@@ -87,10 +83,10 @@ class AttendanceResource extends Resource
                     ->formatStateUsing(fn ($state) => $state ? intdiv($state, 60).'j '.($state % 60).'m' : '-'),
                 TextColumn::make('early_leave_minutes')->label('Pulang cepat')->suffix(' mnt')->sortable()
                     ->color(fn ($state) => $state > 0 ? 'warning' : null)->toggleable(),
-                TextColumn::make('deduction_percent')->label('Potongan')
-                    ->formatStateUsing(fn ($state) => (float) $state > 0 ? self::percent($state) : '-')
+                TextColumn::make('deduction_amount')->label('Potongan')
+                    ->formatStateUsing(fn ($state) => $state > 0 ? Rupiah::format($state) : '-')
                     ->description(fn (Attendance $r) => self::codes($r))
-                    ->color(fn ($state) => (float) $state > 0 ? 'danger' : null)->sortable(),
+                    ->color(fn ($state) => $state > 0 ? 'danger' : null)->sortable(),
                 TextColumn::make('check_in_distance_m')->label('Jarak masuk')->suffix(' m')->numeric(0)->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
@@ -132,8 +128,8 @@ class AttendanceResource extends Resource
                 TextEntry::make('late_minutes')->label('Terlambat')->suffix(' menit'),
                 TextEntry::make('worked_minutes')->label('Total hadir')->suffix(' menit'),
                 TextEntry::make('early_leave_minutes')->label('Pulang cepat')->suffix(' menit'),
-                TextEntry::make('deduction_percent')->label('Potongan hari ini')
-                    ->formatStateUsing(fn ($state, Attendance $r) => self::percent($state).(($c = self::codes($r)) ? " ($c)" : ''))
+                TextEntry::make('deduction_amount')->label('Potongan hari ini')
+                    ->formatStateUsing(fn ($state, Attendance $r) => Rupiah::format($state).(($c = self::codes($r)) ? " ($c)" : ''))
                     ->helperText(fn (Attendance $r) => $r->deductionRuleSet
                         ? 'Aturan berlaku mulai '.$r->deductionRuleSet->effective_from->translatedFormat('d M Y') : 'Belum ada aturan potongan'),
                 TextEntry::make('note')->label('Catatan')->placeholder('-'),
