@@ -29,6 +29,9 @@ class CloseDayTest extends TestCase
 
     public function test_nightly_job_marks_absent_incomplete_and_leave(): void
     {
+        // Pegawai harus sudah terdaftar pada tanggal yang ditutup; tanpa ini created_at
+        // memakai jam asli dan test gagal begitu dijalankan setelah 28 Oktober.
+        $this->at('2026-10-28 06:00');
         $absent = $this->makeEmployee();
         $noCheckout = $this->makeEmployee();
         $complete = $this->makeEmployee();
