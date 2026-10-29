@@ -109,6 +109,11 @@ class WorkPatternResource extends Resource
                     ->state(fn (WorkPattern $r) => $r->versionFor(now(config('attendance.timezone')))->summary())->wrap()
                     ->description(fn (WorkPattern $r) => ($next = self::upcomingVersion($r))
                         ? 'Berubah mulai '.$next->effective_from->translatedFormat('d M Y').': '.$next->summary() : null),
+                TextColumn::make('effective_from')->label('Berlaku mulai')
+                    ->state(fn (WorkPattern $r) => ($from = $r->versionFor(now(config('attendance.timezone')))->effective_from)
+                        && $from->year > 2000 ? $from->translatedFormat('d M Y') : 'Sejak awal')
+                    ->description(fn (WorkPattern $r) => $r->versions->count() > 1
+                        ? ($r->versions->count() - 1).' kali diubah' : 'Belum pernah diubah'),
                 TextColumn::make('late_tolerance_min')->label('Toleransi')->suffix(' mnt')
                     ->state(fn (WorkPattern $r) => $r->versionFor(now(config('attendance.timezone')))->late_tolerance_min),
             ])
