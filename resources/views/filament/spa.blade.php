@@ -12,7 +12,9 @@
     .fi-page-header-main-ctn,
     .fi-page-content > *,
     .fi-wi > * {
-        animation: pk-enter .35s cubic-bezier(.2, .7, .3, 1) both;
+        /* backwards, bukan both: transform yang tetap aktif setelah animasi membuat
+           modal (position: fixed di dalam halaman) terkunci di area konten dan tidak bisa digulir. */
+        animation: pk-enter .35s cubic-bezier(.2, .7, .3, 1) backwards;
     }
     .fi-page-content > :nth-child(2) { animation-delay: .05s; }
     .fi-page-content > :nth-child(3) { animation-delay: .1s; }
