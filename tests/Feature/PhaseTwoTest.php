@@ -240,6 +240,17 @@ class PhaseTwoTest extends TestCase
         $this->assertSame('Jangan lupa absen pulang', collect($this->push->sent)->last()['title']);
     }
 
+    public function test_fcm_token_is_saved_and_cleared_on_logout(): void
+    {
+        $e = $this->makeEmployee();
+
+        $this->api($e)->postJson('/api/v1/devices/fcm-token', ['token' => 'token-baru'])->assertOk();
+        $this->assertSame('token-baru', $e->activeDevice->fresh()->fcm_token);
+
+        $this->api($e)->postJson('/api/v1/auth/logout')->assertOk();
+        $this->assertNull($e->activeDevice->fresh()->fcm_token);
+    }
+
     public function test_fcm_notifier_signs_and_sends(): void
     {
         $key = openssl_pkey_new(['private_key_bits' => 2048]);

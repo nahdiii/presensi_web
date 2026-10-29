@@ -84,9 +84,9 @@ keputusan izin/koreksi. Untuk mengaktifkannya:
    (`com.nahdi.presensi_mobile`) dan iOS (`com.nahdi.presensiMobile`).
 2. Unduh service account JSON (Project settings → Service accounts), simpan
    di server, lalu isi `FCM_CREDENTIALS=/path/ke/berkas.json`.
-3. Di aplikasi: tambahkan `firebase_core` + `firebase_messaging`, berkas
-   `google-services.json` / `GoogleService-Info.plist`, lalu kirim token ke
-   `POST /api/v1/devices/fcm-token`.
+3. Di aplikasi: letakkan `google-services.json` / `GoogleService-Info.plist`
+   (lihat README presensi_mobile). Aplikasi mengirim token ke
+   `POST /api/v1/devices/fcm-token` setelah login; logout menghapus token itu.
 
 Tanpa FCM, cek kehadiran acak tetap muncul di beranda aplikasi karena beranda
 menyegarkan status setiap menit selama aplikasi terbuka.

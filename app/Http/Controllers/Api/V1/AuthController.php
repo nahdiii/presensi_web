@@ -79,6 +79,8 @@ class AuthController extends Controller
     public function logout(Request $request): JsonResponse
     {
         $request->user()->currentAccessToken()->delete();
+        // HP yang sudah logout tidak boleh lagi menerima notifikasi akun ini.
+        $request->user()->employee?->activeDevice?->update(['fcm_token' => null]);
 
         return response()->json(['data' => ['ok' => true]]);
     }
