@@ -51,6 +51,13 @@ return [
     // Disk backup database harian. Di produksi arahkan ke bucket R2 terpisah.
     'backup_disk' => env('BACKUP_DISK', 'local'),
 
+    // Pengajuan izin/sakit/cuti/tugas luar. Jatah cuti dihitung dalam hari
+    // kerja per tahun kalender; bisa diganti per pegawai di panel admin.
+    'leave' => [
+        'annual_quota_days' => (int) env('ATTENDANCE_ANNUAL_LEAVE_DAYS', 12),
+        'max_backdate_days' => 7,
+    ],
+
     // Batas umur koreksi lupa absen (hari ke belakang).
     'correction_max_days' => 30,
 ];

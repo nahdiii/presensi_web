@@ -6,6 +6,7 @@ use App\Enums\LeaveStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CorrectionResource;
 use App\Models\Attendance;
+use App\Services\ApprovalNotifier;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Validation\ValidationException;
@@ -44,7 +45,7 @@ class CorrectionController extends Controller
 
         $path = $request->file('attachment')?->store("corrections/{$employee->id}", config('attendance.photo_disk'));
 
-        return new CorrectionResource($employee->corrections()->create([
+        $correction = $employee->corrections()->create([
             'institution_id' => $employee->institution_id,
             'date' => $data['date'],
             'check_in_time' => $data['check_in_time'] ?? null,
@@ -52,6 +53,9 @@ class CorrectionController extends Controller
             'reason' => $data['reason'],
             'attachment_path' => $path,
             'status' => LeaveStatus::Pending,
-        ]));
+        ]);
+        app(ApprovalNotifier::class)->correctionSubmitted($correction);
+
+        return new CorrectionResource($correction);
     }
 }

@@ -23,6 +23,7 @@ class Employee extends Model
         return [
             'employee_type' => EmployeeType::class,
             'attendance_type' => AttendanceType::class,
+            'annual_leave_quota' => 'integer',
         ];
     }
 

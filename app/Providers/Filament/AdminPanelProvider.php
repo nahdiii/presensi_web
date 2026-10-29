@@ -44,6 +44,9 @@ class AdminPanelProvider extends PanelProvider
             // Pindah halaman tanpa reload penuh: hanya isi halaman yang diganti,
             // dan halaman sudah dimuat di latar saat kursor di atas menu.
             ->spa(hasPrefetching: true)
+            // Lonceng pengajuan baru untuk pimpinan/Admin SDM (lihat ApprovalNotifier).
+            ->databaseNotifications()
+            ->databaseNotificationsPolling('30s')
             ->renderHook(PanelsRenderHook::HEAD_END, fn () => view('filament.styles'))
             ->renderHook(PanelsRenderHook::HEAD_END, fn () => view('filament.spa'))
             ->renderHook(PanelsRenderHook::TOPBAR_LOGO_AFTER, fn () => view('filament.topbar-context'))

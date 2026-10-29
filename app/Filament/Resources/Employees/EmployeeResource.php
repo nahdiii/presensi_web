@@ -98,6 +98,9 @@ class EmployeeResource extends Resource
                 Select::make('attendance_type')->label('Tipe presensi')->options(AttendanceType::class)->required()->default('fixed'),
                 Select::make('work_pattern_id')->label('Pola jadwal khusus')->relationship('workPattern', 'name')->preload()
                     ->helperText('Kosongkan untuk mengikuti pola unit.'),
+                TextInput::make('annual_leave_quota')->label('Jatah cuti tahunan (hari kerja)')->numeric()->minValue(0)->maxValue(365)
+                    ->placeholder((string) config('attendance.leave.annual_quota_days'))
+                    ->helperText('Kosongkan untuk jatah bawaan ('.config('attendance.leave.annual_quota_days').' hari).'),
             ]),
             Section::make('Lokasi absen yang diizinkan')->components([
                 CheckboxList::make('offices')->hiddenLabel()->relationship('offices', 'name')->columns(3)->required()

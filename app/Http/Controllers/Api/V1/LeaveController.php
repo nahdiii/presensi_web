@@ -2,25 +2,32 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Enums\LeaveStatus;
 use App\Enums\LeaveType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\LeaveRequestResource;
+use App\Services\ApprovalNotifier;
+use App\Services\LeaveService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class LeaveController extends Controller
 {
-    /** Pengajuan izin milik sendiri. */
+    /** Pengajuan izin milik sendiri, beserta sisa cuti tahun ini. */
     public function index(Request $request): AnonymousResourceCollection
     {
-        return LeaveRequestResource::collection(
-            $request->user()->employee->leaveRequests()->with('approver')->latest()->limit(100)->get()
-        );
+        $employee = $request->user()->employee;
+
+        return LeaveRequestResource::collection($employee->leaveRequests()->with('approver')->latest()->limit(100)->get())
+            ->additional(['meta' => ['leave_quota' => app(LeaveService::class)->quota($employee, now(config('attendance.timezone'))->year)]]);
     }
 
-    /** Ajukan izin, sakit, cuti, atau tugas luar; disetujui kepala unit. */
+    /**
+     * Ajukan izin, sakit, cuti, atau tugas luar; disetujui kepala unit.
+     * Ditolak (422) bila bertumpuk, terlalu lama ke belakang, tanpa hari
+     * kerja, atau cuti melebihi sisa jatah.
+     */
     public function store(Request $request): LeaveRequestResource
     {
         $data = $request->validate([
@@ -31,17 +38,17 @@ class LeaveController extends Controller
             'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:2048'],
         ]);
         $employee = $request->user()->employee;
-        $path = $request->file('attachment')?->store("leaves/{$employee->id}", config('attendance.photo_disk'));
+        $service = app(LeaveService::class);
+        // Cek aturan dulu supaya lampiran tidak tersimpan untuk pengajuan yang ditolak.
+        $leave = DB::transaction(function () use ($request, $service, $employee, $data) {
+            $leave = $service->submit($employee, $data);
+            if ($file = $request->file('attachment')) {
+                $leave->update(['attachment_path' => $file->store("leaves/{$employee->id}", config('attendance.photo_disk'))]);
+            }
 
-        $leave = $employee->leaveRequests()->create([
-            'institution_id' => $employee->institution_id,
-            'type' => $data['type'],
-            'start_date' => $data['start_date'],
-            'end_date' => $data['end_date'],
-            'reason' => $data['reason'],
-            'attachment_path' => $path,
-            'status' => LeaveStatus::Pending,
-        ]);
+            return $leave;
+        });
+        app(ApprovalNotifier::class)->leaveSubmitted($leave);
 
         return new LeaveRequestResource($leave);
     }

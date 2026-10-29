@@ -6,6 +6,7 @@ use App\Enums\AttendanceStatus;
 use App\Enums\LeaveStatus;
 use App\Models\Attendance;
 use App\Models\AttendanceCorrection;
+use App\Models\Employee;
 use App\Models\User;
 use App\Notifications\Push\PushNotifier;
 use App\Support\DaySchedule;
@@ -26,7 +27,38 @@ class CorrectionService
 
     public function approve(AttendanceCorrection $c, User $approver, ?string $note = null): Attendance
     {
-        $row = DB::transaction(function () use ($c, $approver, $note) {
+        $row = $this->apply($c, $approver, $note, 'Dikoreksi');
+        $this->notify($c, true);
+
+        return $row;
+    }
+
+    /**
+     * Admin SDM mencatat presensi langsung, mis. HP pegawai rusak/hilang.
+     * Disimpan sebagai koreksi yang langsung disetujui atas nama admin,
+     * sehingga siapa, kapan, dan alasannya tetap tercatat.
+     */
+    public function recordManual(Employee $employee, string $date, string $checkIn, ?string $checkOut, string $reason, User $admin): Attendance
+    {
+        $c = $employee->corrections()->create([
+            'institution_id' => $employee->institution_id,
+            'date' => $date,
+            'check_in_time' => $checkIn,
+            'check_out_time' => $checkOut,
+            'reason' => $reason,
+            'status' => LeaveStatus::Pending,
+        ]);
+        $row = $this->apply($c, $admin, "Dicatat manual oleh {$admin->name}", 'Dicatat manual');
+        $this->push->send($employee, 'Presensi dicatat oleh Admin SDM',
+            $c->date->translatedFormat('d M Y').' · masuk '.substr($checkIn, 0, 5).($checkOut ? ', pulang '.substr($checkOut, 0, 5) : '').'.',
+            ['type' => 'correction', 'id' => (string) $c->id]);
+
+        return $row;
+    }
+
+    private function apply(AttendanceCorrection $c, User $approver, ?string $note, string $label): Attendance
+    {
+        return DB::transaction(function () use ($c, $approver, $note, $label) {
             $employee = $c->employee;
             $date = $c->date->toDateString();
             $tz = $employee->offices->first()?->timezone ?? config('attendance.timezone');
@@ -64,17 +96,13 @@ class CorrectionService
             }
             $row->fill([
                 'schedule_snapshot' => $schedule->toArray(),
-                'note' => 'Dikoreksi: '.str($c->reason)->limit(150),
+                'note' => "$label: ".str($c->reason)->limit(150),
             ])->save();
 
             $c->update(['status' => LeaveStatus::Approved, 'approved_by' => $approver->id, 'approved_at' => now(), 'review_note' => $note]);
 
             return $row;
         });
-
-        $this->notify($c, true);
-
-        return $row;
     }
 
     public function reject(AttendanceCorrection $c, User $approver, string $note): void

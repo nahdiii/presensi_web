@@ -94,6 +94,22 @@ keputusan izin/koreksi. Untuk mengaktifkannya:
 Tanpa FCM, cek kehadiran acak tetap muncul di beranda aplikasi karena beranda
 menyegarkan status setiap menit selama aplikasi terbuka.
 
+## Izin, persetujuan, dan presensi manual
+
+- **Pengajuan izin** (`POST /leaves`) ditolak bila tanggal mulai lebih dari 7 hari ke
+  belakang, bertumpuk dengan pengajuan lain yang menunggu/disetujui, atau rentangnya
+  tidak berisi hari kerja. Jumlah hari kerja disimpan di `leave_requests.days`.
+- **Jatah cuti tahunan** dihitung dalam hari kerja per tahun kalender: bawaan 12
+  (`ATTENDANCE_ANNUAL_LEAVE_DAYS`), bisa diganti per pegawai di form Pegawai. Cuti
+  yang menunggu ikut mengurangi sisa. Izin, sakit, dan tugas luar tidak memakai jatah.
+  `GET /leaves` mengirim sisa cuti di `meta.leave_quota`.
+- **Notifikasi pengajuan**: izin, koreksi, dan izin keluar baru dikirim ke kepala unit
+  terdekat di atas pegawai (bukan dirinya sendiri), atau ke Admin SDM bila tidak ada.
+  Muncul di lonceng panel (perlu `worker` antrean) dan sebagai push ke HP pimpinan.
+- **Catat manual** (Presensi → tombol di atas tabel, Admin SDM saja) untuk pegawai yang
+  tidak bisa absen lewat aplikasi. Status dihitung dari jadwal hari itu; catatan ini
+  tersimpan di Koreksi Absen sebagai koreksi yang disetujui atas nama admin.
+
 ## Presensi per sesi mengajar (Fase 3)
 
 Menu **Perkuliahan** di panel admin:

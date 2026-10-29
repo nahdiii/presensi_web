@@ -45,7 +45,7 @@ class AttendanceResource extends Resource
 
     public static function canCreate(): bool
     {
-        return false; // Presensi hanya lewat aplikasi; koreksi menyusul di fase 2.
+        return false; // Lewat aplikasi, koreksi pegawai, atau tombol "Catat manual" (admin).
     }
 
     private static function time(?\DateTimeInterface $at, Attendance $r): ?string

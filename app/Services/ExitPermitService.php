@@ -41,13 +41,16 @@ class ExitPermitService
                 'Anda masih tercatat keluar sejak '.$active->out_at->setTimezone(config('attendance.timezone'))->format('H:i').'.');
         }
 
-        return $employee->exitPermits()->create([
+        $permit = $employee->exitPermits()->create([
             'institution_id' => $employee->institution_id,
             'attendance_id' => $open->id,
             'reason' => $reason,
             'out_at' => $now,
             'status' => LeaveStatus::Pending,
         ]);
+        app(ApprovalNotifier::class)->exitPermitStarted($permit);
+
+        return $permit;
     }
 
     /** "Kembali": lokasi harus di radius kampus lagi. */

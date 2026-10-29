@@ -72,6 +72,7 @@ class LeaveRequestResource extends Resource
                 TextColumn::make('type')->label('Jenis')->badge(),
                 TextColumn::make('start_date')->label('Tanggal')
                     ->formatStateUsing(fn (LeaveRequest $r) => $r->start_date->translatedFormat('d M').($r->end_date->ne($r->start_date) ? ' – '.$r->end_date->translatedFormat('d M Y') : ' '.$r->start_date->format('Y'))),
+                TextColumn::make('days')->label('Hari kerja')->placeholder('-'),
                 TextColumn::make('reason')->label('Alasan')->limit(60)->tooltip(fn (LeaveRequest $r) => $r->reason),
                 TextColumn::make('attachment_path')->label('Lampiran')->formatStateUsing(fn () => 'Lihat')
                     ->url(fn (LeaveRequest $r) => $r->attachment_path
