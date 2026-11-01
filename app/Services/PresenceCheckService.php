@@ -30,7 +30,7 @@ class PresenceCheckService
     public function planFor(Attendance $attendance, Employee $employee): void
     {
         $cfg = config('attendance.presence_checks');
-        if (! $cfg['enabled'] || $employee->attendance_type !== AttendanceType::Fixed || ! $attendance->schedule_snapshot) {
+        if (! $cfg['enabled'] || $employee->attendance_type->effective() !== AttendanceType::Fixed || ! $attendance->schedule_snapshot) {
             return;
         }
         $schedule = DaySchedule::fromArray($attendance->schedule_snapshot);

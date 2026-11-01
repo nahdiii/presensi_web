@@ -42,7 +42,10 @@ return [
 
     // Presensi per sesi mengajar (fase 3): absen dibuka sebelum jam mulai
     // kuliah sampai jam selesai; terlambat bila lewat toleransi dari jam mulai.
+    // Selama nonaktif, menu, API, pengingat, dan penutupan sesi dimatikan, dan
+    // pegawai bertipe per sesi absen harian. Datanya tidak dihapus.
     'sessions' => [
+        'enabled' => (bool) env('TEACHING_SESSIONS_ENABLED', false),
         'open_before_min' => 15,
         'late_after_min' => 15,
         'reminder_before_min' => 15,

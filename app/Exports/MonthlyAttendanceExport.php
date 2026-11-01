@@ -50,7 +50,7 @@ class MonthlyAttendanceExport implements WithMultipleSheets
             new ArraySheet('Rekap '.$this->month, $this->recapHeadings(), $this->recapRows($employees, $attendances)),
             new ArraySheet('Rincian harian', $this->detailHeadings(), $this->detailRows($employees, $attendances)),
         ];
-        if ($sessions->isNotEmpty()) {
+        if (config('attendance.sessions.enabled') && $sessions->isNotEmpty()) {
             $sheets[] = new ArraySheet('Sesi mengajar', $this->sessionHeadings(), $this->sessionRows($employees, $sessions));
         }
 

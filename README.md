@@ -118,6 +118,11 @@ menyegarkan status setiap menit selama aplikasi terbuka.
 
 ## Presensi per sesi mengajar (Fase 3)
 
+Fitur ini **nonaktif** sampai presensi pegawai berjalan mantap. Selama nonaktif, menu
+Perkuliahan, API `teaching/*`, pengingat, dan penutupan sesi dimatikan, dan pegawai
+bertipe per sesi absen harian dengan jam unit. Data yang ada tidak dihapus. Nyalakan
+dengan `TEACHING_SESSIONS_ENABLED=true`; aplikasi mobile mengikuti tanpa rilis baru.
+
 Menu **Perkuliahan** di panel admin:
 
 - **Mata Kuliah** dan **Jadwal Mengajar**: jadwal mingguan per dosen selama

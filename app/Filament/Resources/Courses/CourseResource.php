@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Courses;
 
 use App\Filament\Concerns\AdminOnly;
+use App\Filament\Concerns\RequiresTeachingSessions;
 use App\Filament\Resources\Courses\Pages\ManageCourses;
 use App\Models\Course;
 use App\Models\Unit;
@@ -20,7 +21,7 @@ use Filament\Tables\Table;
 
 class CourseResource extends Resource
 {
-    use AdminOnly;
+    use AdminOnly, RequiresTeachingSessions;
 
     protected static ?string $model = Course::class;
 

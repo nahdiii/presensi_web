@@ -38,7 +38,7 @@ class AttendanceService
 
         return $this->audited($employee, 'in', $p, $ctx, function () use ($employee, $p, &$ctx) {
             $device = $this->assertDevice($employee, $p->deviceUid);
-            if ($employee->attendance_type === AttendanceType::Session) {
+            if ($employee->attendance_type->effective() === AttendanceType::Session) {
                 throw new AttendanceRejected(RejectReason::OutsideWindow,
                     'Presensi Anda dihitung per sesi mengajar. Absen lewat jadwal mengajar di beranda.');
             }
@@ -183,7 +183,7 @@ class AttendanceService
             $attendance = Attendance::where('employee_id', $employee->id)->whereDate('date', $date)->first();
         }
 
-        [$action, $message] = $employee->attendance_type === AttendanceType::Session
+        [$action, $message] = $employee->attendance_type->effective() === AttendanceType::Session
             ? ['sessions', 'Presensi Anda dihitung per sesi mengajar.']
             : $this->nextAction($attendance, $schedule, $date, $tz, $now);
 

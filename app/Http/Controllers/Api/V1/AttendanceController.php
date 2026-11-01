@@ -54,11 +54,13 @@ class AttendanceController extends Controller
             'next_action' => $t['action'],
             'next_action_message' => $t['message'],
             // Fase 2: izin keluar hanya untuk presensi tetap yang sedang di kampus.
-            'can_exit' => $t['action'] === 'check_out' && $employee->attendance_type === AttendanceType::Fixed,
+            'can_exit' => $t['action'] === 'check_out' && $employee->attendance_type->effective() === AttendanceType::Fixed,
             'exit_permit' => ($permit = app(ExitPermitService::class)->active($employee)) ? new ExitPermitResource($permit) : null,
             'presence_check' => ($check = app(PresenceCheckService::class)->pendingFor($employee)) ? new PresenceCheckResource($check) : null,
-            // Fase 3: jadwal mengajar hari ini (kosong bila tidak mengajar).
-            'teaching' => TeachingSlotResource::collection(app(TeachingSessionService::class)->forDay($employee, $t['now'])),
+            // Fase 3: jadwal mengajar hari ini (kosong bila tidak mengajar atau fiturnya nonaktif).
+            'teaching' => config('attendance.sessions.enabled')
+                ? TeachingSlotResource::collection(app(TeachingSessionService::class)->forDay($employee, $t['now']))
+                : [],
         ]]);
     }
 

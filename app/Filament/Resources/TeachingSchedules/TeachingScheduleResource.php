@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\TeachingSchedules;
 
 use App\Filament\Concerns\AdminOnly;
+use App\Filament\Concerns\RequiresTeachingSessions;
 use App\Filament\Resources\TeachingSchedules\Pages\ManageTeachingSchedules;
 use App\Models\Employee;
 use App\Models\TeachingSchedule;
@@ -27,7 +28,7 @@ use Illuminate\Database\Eloquent\Builder;
 /** Jadwal mengajar mingguan per semester; dasar presensi per sesi. */
 class TeachingScheduleResource extends Resource
 {
-    use AdminOnly;
+    use AdminOnly, RequiresTeachingSessions;
 
     protected static ?string $model = TeachingSchedule::class;
 

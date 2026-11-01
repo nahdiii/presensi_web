@@ -30,7 +30,7 @@ class SendAttendanceReminders extends Command
         Employee::with(['offices', 'activeDevice'])
             ->whereHas('user', fn ($q) => $q->where('is_active', true))
             ->whereHas('activeDevice', fn ($q) => $q->whereNotNull('fcm_token'))
-            ->where('attendance_type', AttendanceType::Fixed)
+            ->whereIn('attendance_type', AttendanceType::storedAs(AttendanceType::Fixed))
             ->each(function (Employee $e) use ($shifts, $push, $cfg, &$sent) {
                 $tz = $e->offices->first()?->timezone ?? config('attendance.timezone');
                 $now = CarbonImmutable::now($tz);
@@ -60,6 +60,7 @@ class SendAttendanceReminders extends Command
         $now = CarbonImmutable::now(config('attendance.timezone'));
         $date = $now->toDateString();
         TeachingSchedule::occursOn($date)
+            ->when(! config('attendance.sessions.enabled'), fn ($q) => $q->whereRaw('false'))
             ->with(['course', 'office', 'employee.offices', 'employee.activeDevice'])
             ->whereHas('employee.user', fn ($q) => $q->where('is_active', true))
             ->whereHas('employee.activeDevice', fn ($q) => $q->whereNotNull('fcm_token'))

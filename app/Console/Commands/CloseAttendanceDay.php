@@ -38,7 +38,7 @@ class CloseAttendanceDay extends Command
         $counts = [];
         Employee::with('user', 'offices')
             ->whereHas('user', fn ($q) => $q->where('is_active', true))
-            ->where('attendance_type', '!=', AttendanceType::Session)
+            ->whereNotIn('attendance_type', AttendanceType::storedAs(AttendanceType::Session))
             ->chunkById(200, function ($employees) use ($dates, $shifts, $now, $tz, &$counts) {
                 foreach ($employees as $employee) {
                     foreach ($dates as $date) {
@@ -51,7 +51,7 @@ class CloseAttendanceDay extends Command
             });
 
         // Sesi mengajar (fase 3) ditutup per jadwal, untuk semua tipe presensi.
-        foreach ($dates as $date) {
+        foreach (config('attendance.sessions.enabled') ? $dates : [] as $date) {
             foreach ($sessions->closeDay($date, $now) as $status => $n) {
                 $counts[$status] = ($counts[$status] ?? 0) + $n;
             }

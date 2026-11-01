@@ -107,7 +107,9 @@ class EmployeeResource extends Resource
                 TextInput::make('phone')->label('No. HP')->tel()->maxLength(20),
                 Select::make('employee_type')->label('Jenis pegawai')->options(EmployeeType::class)->required(),
                 Select::make('unit_id')->label('Unit')->relationship('unit', 'name')->searchable()->preload(),
-                Select::make('attendance_type')->label('Tipe presensi')->options(AttendanceType::class)->required()->default('fixed'),
+                Select::make('attendance_type')->label('Tipe presensi')->required()->default('fixed')
+                    ->options(fn () => collect(AttendanceType::cases())->filter(fn (AttendanceType $type) => $type->effective() === $type)
+                        ->mapWithKeys(fn (AttendanceType $type) => [$type->value => $type->getLabel()])->all()),
                 Select::make('work_pattern_id')->label('Pola jadwal khusus')->relationship('workPattern', 'name')->preload()
                     ->helperText('Kosongkan untuk mengikuti pola unit.'),
                 TextInput::make('annual_leave_quota')->label('Jatah cuti tahunan (hari kerja)')->numeric()->minValue(0)->maxValue(365)
@@ -131,7 +133,8 @@ class EmployeeResource extends Resource
                 TextColumn::make('nip')->label('NIP')->searchable()->copyable(),
                 TextColumn::make('employee_type')->label('Jenis')->badge(),
                 TextColumn::make('unit.name')->label('Unit')->sortable()->placeholder('-'),
-                TextColumn::make('attendance_type')->label('Presensi')->badge()->color('gray'),
+                TextColumn::make('attendance_type')->label('Presensi')->badge()->color('gray')
+                    ->state(fn (Employee $r) => $r->attendance_type->effective()),
                 TextColumn::make('activeDevice.model')->label('Perangkat')->placeholder('Belum terikat')
                     ->description(fn (Employee $r) => $r->activeDevice?->bound_at?->diffForHumans()),
                 IconColumn::make('user.is_active')->label('Aktif')->boolean(),

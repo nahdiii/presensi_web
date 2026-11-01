@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\TeachingSessions;
 
 use App\Enums\AttendanceStatus;
+use App\Filament\Concerns\RequiresTeachingSessions;
 use App\Filament\Concerns\ScopedToSupervisedUnits;
 use App\Filament\Resources\TeachingSessions\Pages\ListTeachingSessions;
 use App\Filament\Resources\TeachingSessions\Pages\ViewTeachingSession;
@@ -27,7 +28,7 @@ use Illuminate\Support\Facades\Storage;
 /** Presensi per sesi mengajar; sesi tanpa absen ditandai alpa oleh close-day. */
 class TeachingSessionResource extends Resource
 {
-    use ScopedToSupervisedUnits;
+    use RequiresTeachingSessions, ScopedToSupervisedUnits;
 
     protected static ?string $model = TeachingSession::class;
 
