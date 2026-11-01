@@ -19,6 +19,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 
 class AttendanceController extends Controller
 {
@@ -87,15 +88,40 @@ class AttendanceController extends Controller
             ->response();
     }
 
-    /** Riwayat satu bulan, mis. ?month=2026-10. */
+    /**
+     * Riwayat satu bulan (?month=2026-10) atau rentang tanggal
+     * (?from=2026-09-25&to=2026-10-24), untuk kampus yang periodenya tidak
+     * mulai dari awal bulan. Rentang maksimal satu tahun.
+     */
     public function history(Request $request): JsonResponse
     {
-        $request->validate(['month' => ['nullable', 'date_format:Y-m']]);
-        $month = CarbonImmutable::createFromFormat('Y-m-d', ($request->input('month') ?? now()->format('Y-m')).'-01');
+        $request->validate([
+            'month' => ['nullable', 'date_format:Y-m'],
+            'from' => ['nullable', 'required_with:to', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'required_with:from', 'date_format:Y-m-d', 'after_or_equal:from'],
+        ], [
+            'from.required_with' => 'Tanggal awal wajib diisi.',
+            'to.required_with' => 'Tanggal akhir wajib diisi.',
+            'to.after_or_equal' => 'Tanggal akhir tidak boleh sebelum tanggal awal.',
+        ]);
+
+        $month = null;
+        if ($request->filled('from')) {
+            $from = CarbonImmutable::createFromFormat('Y-m-d', $request->input('from'));
+            $to = CarbonImmutable::createFromFormat('Y-m-d', $request->input('to'));
+            if ($from->addYear()->lt($to)) {
+                throw ValidationException::withMessages(['to' => 'Rentang tanggal maksimal satu tahun.']);
+            }
+        } else {
+            $month = CarbonImmutable::createFromFormat('Y-m-d', ($request->input('month') ?? now()->format('Y-m')).'-01');
+            $from = $month->startOfMonth();
+            $to = $month->endOfMonth();
+        }
+
         $items = $request->user()->employee->attendances()
             ->with(['checkInOffice', 'checkOutOffice'])
-            ->whereDate('date', '>=', $month->startOfMonth()->toDateString())
-            ->whereDate('date', '<=', $month->endOfMonth()->toDateString())
+            ->whereDate('date', '>=', $from->toDateString())
+            ->whereDate('date', '<=', $to->toDateString())
             ->orderByDesc('date')
             ->get();
 
@@ -107,7 +133,9 @@ class AttendanceController extends Controller
             ->put('deduction_amount', (int) $items->sum('deduction_amount'));
 
         return response()->json(['data' => [
-            'month' => $month->format('Y-m'),
+            'month' => $month?->format('Y-m'),
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
             'summary' => $summary,
             'items' => AttendanceResource::collection($items),
         ]]);

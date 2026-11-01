@@ -278,6 +278,54 @@ class CheckInTest extends TestCase
         $this->punch($e)->assertStatus(403)->assertJsonPath('error.code', 'inactive_account');
     }
 
+    public function test_history_filters_by_date_range(): void
+    {
+        $e = $this->makeEmployee();
+        Sanctum::actingAs($e->user);
+        foreach (['2026-09-24', '2026-09-25', '2026-10-24', '2026-10-25'] as $date) {
+            Attendance::create([
+                'institution_id' => $e->institution_id, 'employee_id' => $e->id, 'date' => $date,
+                'status' => AttendanceStatus::Present,
+            ]);
+        }
+        $get = fn (string $query) => $this->withHeader('X-Device-UID', $this->deviceUids[$e->id])
+            ->getJson("/api/v1/attendance/history?{$query}");
+
+        $get('from=2026-09-25&to=2026-10-24')->assertOk()
+            ->assertJsonPath('data.month', null)
+            ->assertJsonPath('data.from', '2026-09-25')
+            ->assertJsonPath('data.to', '2026-10-24')
+            ->assertJsonPath('data.summary.present', 2)
+            ->assertJsonCount(2, 'data.items')
+            ->assertJsonPath('data.items.0.date', '2026-10-24')
+            ->assertJsonPath('data.items.1.date', '2026-09-25');
+
+        $get('from=2026-10-24&to=2026-10-24')->assertOk()->assertJsonCount(1, 'data.items');
+
+        // Klien lama yang masih memakai ?month tetap mendapat satu bulan penuh.
+        $get('month=2026-10')->assertOk()
+            ->assertJsonPath('data.month', '2026-10')
+            ->assertJsonPath('data.from', '2026-10-01')
+            ->assertJsonPath('data.to', '2026-10-31')
+            ->assertJsonCount(2, 'data.items');
+    }
+
+    public function test_history_rejects_invalid_date_range(): void
+    {
+        $e = $this->makeEmployee();
+        Sanctum::actingAs($e->user);
+        $get = fn (string $query) => $this->withHeader('X-Device-UID', $this->deviceUids[$e->id])
+            ->getJson("/api/v1/attendance/history?{$query}");
+
+        $get('from=2026-10-01')->assertUnprocessable()->assertJsonPath('error.message', 'Tanggal akhir wajib diisi.');
+        $get('to=2026-10-01')->assertUnprocessable()->assertJsonPath('error.message', 'Tanggal awal wajib diisi.');
+        $get('from=2026-10-02&to=2026-10-01')->assertUnprocessable()
+            ->assertJsonPath('error.message', 'Tanggal akhir tidak boleh sebelum tanggal awal.');
+        $get('from=2025-10-01&to=2026-10-02')->assertUnprocessable()
+            ->assertJsonPath('error.message', 'Rentang tanggal maksimal satu tahun.');
+        $get('from=2025-10-01&to=2026-10-01')->assertOk();
+    }
+
     public function test_today_reports_next_action(): void
     {
         $e = $this->makeEmployee();
