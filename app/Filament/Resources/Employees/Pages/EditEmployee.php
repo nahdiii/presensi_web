@@ -15,26 +15,30 @@ class EditEmployee extends EditRecord
     {
         $user = $this->record->user;
 
+        // Data form ikut terkirim ke browser, jadi peran tidak boleh diisi untuk akun yang terkunci.
         return $data + [
             'user_name' => $user->name,
             'user_email' => $user->email,
+        ] + (EmployeeResource::isAccountLocked($this->record) ? [] : [
             'user_roles' => $user->getRoleNames()->all(),
             'user_is_active' => $user->is_active,
-        ];
+        ]);
     }
 
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
         return DB::transaction(function () use ($record, $data) {
-            $user = $record->user;
-            $user->fill(['name' => $data['user_name'], 'email' => $data['user_email'], 'is_active' => $data['user_is_active']]);
-            if (filled($data['user_password'] ?? null)) {
-                $user->password = $data['user_password'];
-            }
-            $user->save();
-            $user->syncRoles($data['user_roles']);
-            if (! $user->is_active) {
-                $user->tokens()->delete();
+            if (! EmployeeResource::isAccountLocked($record)) {
+                $user = $record->user;
+                $user->fill(['name' => $data['user_name'], 'email' => $data['user_email'], 'is_active' => $data['user_is_active']]);
+                if (filled($data['user_password'] ?? null)) {
+                    $user->password = $data['user_password'];
+                }
+                $user->save();
+                $user->syncRoles($data['user_roles']);
+                if (! $user->is_active) {
+                    $user->tokens()->delete();
+                }
             }
             $record->update(collect($data)->reject(fn ($v, $k) => str_starts_with($k, 'user_'))->all());
 

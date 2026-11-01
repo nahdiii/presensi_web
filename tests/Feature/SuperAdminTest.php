@@ -7,11 +7,15 @@ use App\Filament\Resources\Employees\EmployeeResource;
 use App\Filament\Resources\Employees\Pages\CreateEmployee;
 use App\Filament\Resources\Employees\Pages\EditEmployee;
 use App\Filament\Resources\Employees\Pages\ListEmployees;
+use App\Jobs\ProcessAttendancePhoto;
+use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\Concerns\BuildsCampus;
@@ -92,22 +96,75 @@ class SuperAdminTest extends TestCase
         $this->actingAs($this->admin)->get('/admin')->assertOk()->assertSee('Admin SDM')->assertDontSee('Super Admin');
     }
 
-    public function test_admin_cannot_see_super_admin_account_in_employee_list(): void
+    public function test_admin_still_sees_super_admin_as_employee_without_role_name(): void
     {
         $this->actingAs($this->admin);
-        Livewire::test(ListEmployees::class)
-            ->assertCanSeeTableRecords([$this->staff])
-            ->assertCanNotSeeTableRecords([$this->superEmployee]);
-
-        $this->actingAs($this->super);
         Livewire::test(ListEmployees::class)->assertCanSeeTableRecords([$this->superEmployee, $this->staff]);
+
+        foreach (['index' => [], 'edit' => ['record' => $this->superEmployee]] as $page => $params) {
+            $this->get(EmployeeResource::getUrl($page, $params, panel: 'admin'))->assertOk()
+                ->assertSee($this->super->name)
+                ->assertDontSee('super_admin')
+                ->assertDontSee('Super Admin');
+        }
     }
 
-    public function test_admin_cannot_open_super_admin_account(): void
+    public function test_super_admin_employee_can_still_check_in(): void
     {
-        $this->actingAs($this->admin)
-            ->get(EmployeeResource::getUrl('edit', ['record' => $this->superEmployee], panel: 'admin'))
-            ->assertNotFound();
+        Storage::fake('attendance');
+        Queue::fake([ProcessAttendancePhoto::class]);
+        $this->at('2026-10-28 07:25');
+
+        $this->punch($this->superEmployee)->assertSuccessful();
+
+        $this->assertSame(1, Attendance::where('employee_id', $this->superEmployee->id)->count());
+    }
+
+    public function test_admin_can_update_employment_data_of_super_admin(): void
+    {
+        $this->actingAs($this->admin);
+        Livewire::test(EditEmployee::class, ['record' => $this->superEmployee->getRouteKey()])
+            ->fillForm(['phone' => '081234567890'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('081234567890', $this->superEmployee->fresh()->phone);
+        $this->assertTrue($this->super->fresh()->isSuperAdmin());
+    }
+
+    public function test_admin_cannot_change_account_of_super_admin(): void
+    {
+        $before = $this->super->fresh();
+        $this->actingAs($this->admin);
+        Livewire::test(EditEmployee::class, ['record' => $this->superEmployee->getRouteKey()])
+            ->set('data.user_name', 'Dibajak')
+            ->set('data.user_email', 'dibajak@kampus.test')
+            ->set('data.user_password', 'dibajak-123')
+            ->set('data.user_is_active', false)
+            ->set('data.user_roles', [User::ROLE_EMPLOYEE])
+            ->call('save');
+
+        $after = $this->super->fresh();
+        $this->assertSame($before->name, $after->name);
+        $this->assertSame($before->email, $after->email);
+        $this->assertSame($before->password, $after->password);
+        $this->assertTrue($after->is_active);
+        $this->assertTrue($after->isSuperAdmin());
+    }
+
+    public function test_super_admin_can_change_account_of_super_admin(): void
+    {
+        $other = $this->makeEmployee();
+        $other->user->assignRole(User::ROLE_SUPER);
+
+        $this->actingAs($this->super);
+        Livewire::test(EditEmployee::class, ['record' => $other->getRouteKey()])
+            ->assertSet('data.user_roles', [User::ROLE_SUPER])
+            ->fillForm(['user_roles' => [User::ROLE_EMPLOYEE]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertFalse($other->user->fresh()->isSuperAdmin());
     }
 
     public function test_admin_cannot_grant_super_admin_by_tampering_create_form(): void

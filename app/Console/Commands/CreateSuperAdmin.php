@@ -9,8 +9,8 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 /**
- * Akun Super Admin tidak punya data pegawai, jadi tidak bisa dibuat dari
- * panel. Password diminta di layar supaya tidak tertinggal di riwayat shell.
+ * Hanya Super Admin yang bisa memberi peran ini dari panel, jadi akun pertama
+ * dibuat di sini. Password diminta di layar supaya tidak tertinggal di riwayat shell.
  */
 #[Signature('super-admin:create {email} {--name=Super Admin : Nama untuk akun baru}')]
 #[Description('Buat akun Super Admin, atau jadikan akun yang sudah ada Super Admin')]

@@ -65,8 +65,11 @@ lihat `app/Enums/RejectReason.php`.
 ## Peran
 
 - `super_admin`: semua wewenang `admin_sdm`, dan satu-satunya yang bisa memberi peran
-  ini. Peran dan akunnya tidak terlihat oleh peran di bawahnya. Buat akun di produksi
-  dengan `php artisan super-admin:create email@kampus.ac.id` (password diminta di layar).
+  ini. Nama perannya tidak terlihat oleh peran di bawahnya. Pegawai yang menjadi Super
+  Admin tetap muncul di daftar dan absen seperti biasa; admin bisa mengurus data
+  kepegawaiannya, tetapi tidak bisa mengubah email, password, peran, atau status akunnya.
+  Buat akun pertama di produksi dengan `php artisan super-admin:create email@kampus.ac.id`
+  (password diminta di layar).
 - `admin_sdm`: semua menu, termasuk pegawai, lokasi, pola jadwal, reset perangkat.
 - `pimpinan_unit`: dashboard, presensi, izin, dan log untuk unit yang ia kepalai
   (beserta sub-unit); menyetujui izin.

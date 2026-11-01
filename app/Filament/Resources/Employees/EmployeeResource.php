@@ -34,9 +34,7 @@ use Illuminate\Validation\Rules\Unique;
 
 class EmployeeResource extends Resource
 {
-    use ScopedToSupervisedUnits {
-        getEloquentQuery as scopedEloquentQuery;
-    }
+    use ScopedToSupervisedUnits;
 
     protected static ?string $model = Employee::class;
 
@@ -53,14 +51,13 @@ class EmployeeResource extends Resource
         return 'Kepegawaian';
     }
 
-    /** Akun Super Admin hanya terlihat oleh sesama Super Admin. */
-    public static function getEloquentQuery(): Builder
+    /**
+     * Super Admin tetap pegawai biasa di daftar ini, tetapi akun loginnya hanya
+     * boleh diubah sesama Super Admin. Data kepegawaiannya tetap bisa diurus admin.
+     */
+    public static function isAccountLocked(?Employee $record): bool
     {
-        $query = static::scopedEloquentQuery();
-
-        return auth()->user()?->isSuperAdmin()
-            ? $query
-            : $query->whereDoesntHave('user.roles', fn (Builder $query) => $query->where('name', User::ROLE_SUPER));
+        return $record?->user->isSuperAdmin() && ! auth()->user()->isSuperAdmin();
     }
 
     protected static function unitColumn(): ?string
@@ -85,20 +82,22 @@ class EmployeeResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
+        $accountLocked = fn (?Employee $record) => static::isAccountLocked($record);
+
         return $schema->components([
             Section::make('Akun')->columns(2)->components([
-                TextInput::make('user_name')->label('Nama lengkap')->required()->maxLength(150),
-                TextInput::make('user_email')->label('Email')->email()->required()
+                TextInput::make('user_name')->label('Nama lengkap')->required()->maxLength(150)->disabled($accountLocked),
+                TextInput::make('user_email')->label('Email')->email()->required()->disabled($accountLocked)
                     ->unique(table: User::class, column: 'email', ignorable: fn (?Employee $record) => $record?->user),
-                TextInput::make('user_password')->label('Password')->password()->revealable()
+                TextInput::make('user_password')->label('Password')->password()->revealable()->hidden($accountLocked)
                     ->required(fn (string $operation) => $operation === 'create')
                     ->minLength(8)
                     ->helperText(fn (string $operation) => $operation === 'edit' ? 'Kosongkan bila tidak diganti.' : null),
-                Select::make('user_roles')->label('Peran')->multiple()
+                Select::make('user_roles')->label('Peran')->multiple()->hidden($accountLocked)
                     ->options(fn () => [User::ROLE_EMPLOYEE => 'Pegawai', User::ROLE_HEAD => 'Pimpinan unit', User::ROLE_ADMIN => 'Admin SDM']
                         + (auth()->user()->isSuperAdmin() ? [User::ROLE_SUPER => 'Super Admin'] : []))
                     ->default([User::ROLE_EMPLOYEE])->required(),
-                Toggle::make('user_is_active')->label('Aktif')->default(true)
+                Toggle::make('user_is_active')->label('Aktif')->default(true)->hidden($accountLocked)
                     ->helperText('Menonaktifkan akun juga mencabut semua token login.'),
             ]),
             Section::make('Data kepegawaian')->columns(2)->components([
