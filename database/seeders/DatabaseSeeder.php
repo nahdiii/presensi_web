@@ -23,6 +23,7 @@ use Spatie\Permission\Models\Role;
 /**
  * Data contoh untuk pengembangan lokal. Semua akun berpassword "password".
  *
+ *   super@kampus.test     Super Admin (panel /admin)
  *   admin@kampus.test     Admin SDM (panel /admin)
  *   dekan.ft@kampus.test  Pimpinan unit Fakultas Teknik (panel + aplikasi)
  *   tendik@kampus.test    Tendik Biro SDM, presensi tetap (aplikasi)
@@ -36,7 +37,7 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        foreach ([User::ROLE_ADMIN, User::ROLE_HEAD, User::ROLE_EMPLOYEE] as $role) {
+        foreach ([User::ROLE_SUPER, User::ROLE_ADMIN, User::ROLE_HEAD, User::ROLE_EMPLOYEE] as $role) {
             Role::findOrCreate($role, 'web');
         }
 
@@ -74,6 +75,9 @@ class DatabaseSeeder extends Seeder
         $ft = Unit::create(['institution_id' => $inst->id, 'name' => 'Fakultas Teknik', 'type' => UnitType::Fakultas, 'work_pattern_id' => $tendik->id]);
         $if = Unit::create(['institution_id' => $inst->id, 'parent_id' => $ft->id, 'name' => 'Prodi Informatika', 'type' => UnitType::Prodi]);
         $bsdm = Unit::create(['institution_id' => $inst->id, 'name' => 'Biro Sumber Daya Manusia', 'type' => UnitType::Biro, 'work_pattern_id' => $tendik->id]);
+
+        $super = User::create(['institution_id' => $inst->id, 'name' => 'Super Admin', 'email' => 'super@kampus.test', 'password' => 'password']);
+        $super->assignRole(User::ROLE_SUPER);
 
         $admin = User::create(['institution_id' => $inst->id, 'name' => 'Admin SDM', 'email' => 'admin@kampus.test', 'password' => 'password']);
         $admin->assignRole(User::ROLE_ADMIN);

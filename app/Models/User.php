@@ -18,6 +18,8 @@ use Spatie\Permission\Traits\HasRoles;
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements FilamentUser
 {
+    public const ROLE_SUPER = 'super_admin';
+
     public const ROLE_ADMIN = 'admin_sdm';
 
     public const ROLE_HEAD = 'pimpinan_unit';
@@ -48,12 +50,18 @@ class User extends Authenticatable implements FilamentUser
 
     public function canAccessPanel(Panel $panel): bool
     {
-        return $this->is_active && $this->hasAnyRole([self::ROLE_ADMIN, self::ROLE_HEAD]);
+        return $this->is_active && $this->hasAnyRole([self::ROLE_SUPER, self::ROLE_ADMIN, self::ROLE_HEAD]);
     }
 
+    /** Super Admin punya semua wewenang Admin SDM. */
     public function isAdmin(): bool
     {
-        return $this->hasRole(self::ROLE_ADMIN);
+        return $this->hasAnyRole([self::ROLE_SUPER, self::ROLE_ADMIN]);
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasRole(self::ROLE_SUPER);
     }
 
     /**

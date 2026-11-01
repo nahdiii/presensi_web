@@ -34,7 +34,9 @@ use Illuminate\Validation\Rules\Unique;
 
 class EmployeeResource extends Resource
 {
-    use ScopedToSupervisedUnits;
+    use ScopedToSupervisedUnits {
+        getEloquentQuery as scopedEloquentQuery;
+    }
 
     protected static ?string $model = Employee::class;
 
@@ -49,6 +51,16 @@ class EmployeeResource extends Resource
     public static function getNavigationGroup(): ?string
     {
         return 'Kepegawaian';
+    }
+
+    /** Akun Super Admin hanya terlihat oleh sesama Super Admin. */
+    public static function getEloquentQuery(): Builder
+    {
+        $query = static::scopedEloquentQuery();
+
+        return auth()->user()?->isSuperAdmin()
+            ? $query
+            : $query->whereDoesntHave('user.roles', fn (Builder $query) => $query->where('name', User::ROLE_SUPER));
     }
 
     protected static function unitColumn(): ?string
@@ -83,7 +95,8 @@ class EmployeeResource extends Resource
                     ->minLength(8)
                     ->helperText(fn (string $operation) => $operation === 'edit' ? 'Kosongkan bila tidak diganti.' : null),
                 Select::make('user_roles')->label('Peran')->multiple()
-                    ->options([User::ROLE_EMPLOYEE => 'Pegawai', User::ROLE_HEAD => 'Pimpinan unit', User::ROLE_ADMIN => 'Admin SDM'])
+                    ->options(fn () => [User::ROLE_EMPLOYEE => 'Pegawai', User::ROLE_HEAD => 'Pimpinan unit', User::ROLE_ADMIN => 'Admin SDM']
+                        + (auth()->user()->isSuperAdmin() ? [User::ROLE_SUPER => 'Super Admin'] : []))
                     ->default([User::ROLE_EMPLOYEE])->required(),
                 Toggle::make('user_is_active')->label('Aktif')->default(true)
                     ->helperText('Menonaktifkan akun juga mencabut semua token login.'),

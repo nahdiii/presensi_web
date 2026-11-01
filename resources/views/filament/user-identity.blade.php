@@ -1,6 +1,7 @@
 @php
     $user = auth()->user();
     $role = match (true) {
+        $user?->isSuperAdmin() => 'Super Admin',
         $user?->isAdmin() => 'Admin SDM',
         $user?->hasRole(\App\Models\User::ROLE_HEAD) => 'Pimpinan unit',
         default => 'Pegawai',
