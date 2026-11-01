@@ -42,8 +42,9 @@ class UnitResource extends Resource
         return $schema->columns(2)->components([
             TextInput::make('name')->label('Nama unit')->required()->maxLength(150),
             Select::make('type')->label('Jenis')->options(UnitType::class)->required(),
-            Select::make('parent_id')->label('Unit induk')->relationship('parent', 'name')->searchable()->preload()
-                ->helperText('Mis. prodi berinduk ke fakultas.'),
+            Select::make('parent_id')->label('Unit induk')->searchable()->preload()
+                ->relationship('parent', 'name', fn ($query, ?Unit $record) => $query->when($record, fn ($query) => $query->whereKeyNot($record->descendantIds())))
+                ->helperText('Mis. prodi berinduk ke fakultas. Unit ini dan turunannya tidak bisa dipilih.'),
             Select::make('head_employee_id')->label('Kepala unit')->searchable()
                 ->relationship('head', 'id', fn ($query) => $query->with('user'))
                 ->getOptionLabelFromRecordUsing(fn ($record) => $record->user->name)

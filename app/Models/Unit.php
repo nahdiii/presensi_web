@@ -8,11 +8,22 @@ use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Validation\ValidationException;
 
 #[Guarded(['id'])]
 class Unit extends Model
 {
     use BelongsToInstitution;
+
+    protected static function booted(): void
+    {
+        static::saving(function (Unit $unit) {
+            if ($unit->exists && $unit->parent_id && $unit->isDirty('parent_id')
+                && in_array((int) $unit->parent_id, $unit->descendantIds(), true)) {
+                throw ValidationException::withMessages(['parent_id' => 'Unit induk tidak boleh unit ini sendiri atau turunannya.']);
+            }
+        });
+    }
 
     protected function casts(): array
     {
@@ -63,7 +74,8 @@ class Unit extends Model
         $ids = [$this->id];
         $frontier = [$this->id];
         while ($frontier) {
-            $frontier = Unit::whereIn('parent_id', $frontier)->pluck('id')->all();
+            // Data lama bisa saja melingkar, jadi unit yang sudah dilewati tidak ditelusuri lagi.
+            $frontier = array_values(array_diff(Unit::whereIn('parent_id', $frontier)->pluck('id')->all(), $ids));
             $ids = array_merge($ids, $frontier);
         }
 

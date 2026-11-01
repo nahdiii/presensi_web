@@ -52,7 +52,7 @@ class ApprovalNotifier
     /** @return Collection<int, User> */
     public function approversFor(Employee $employee): Collection
     {
-        for ($unit = $employee->unit; $unit; $unit = $unit->parent) {
+        foreach ($employee->unit?->lineage() ?? [] as $unit) {
             if ($unit->head_employee_id && $unit->head_employee_id !== $employee->id) {
                 $head = $unit->head?->user;
                 if ($head?->is_active) {
