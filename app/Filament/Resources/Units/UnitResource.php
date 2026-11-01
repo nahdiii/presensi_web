@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Units;
 use App\Enums\UnitType;
 use App\Filament\Concerns\AdminOnly;
 use App\Filament\Resources\Units\Pages\ManageUnits;
+use App\Models\Employee;
 use App\Models\Unit;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
@@ -46,9 +47,9 @@ class UnitResource extends Resource
                 ->relationship('parent', 'name', fn ($query, ?Unit $record) => $query->when($record, fn ($query) => $query->whereKeyNot($record->descendantIds())))
                 ->helperText('Mis. prodi berinduk ke fakultas. Unit ini dan turunannya tidak bisa dipilih.'),
             Select::make('head_employee_id')->label('Kepala unit')->searchable()
-                ->relationship('head', 'id', fn ($query) => $query->with('user'))
-                ->getOptionLabelFromRecordUsing(fn ($record) => $record->user->name)
-                ->helperText('Menyetujui izin pegawai di unit ini.'),
+                ->options(fn () => Employee::with('user')->get()->sortBy('user.name')
+                    ->mapWithKeys(fn (Employee $e) => [$e->id => $e->user->name.($e->nip ? " ({$e->nip})" : '')])->all())
+                ->helperText('Menyetujui izin pegawai di unit ini. Beri juga peran Pimpinan unit supaya bisa membuka panel.'),
             Select::make('work_pattern_id')->label('Pola jadwal unit')->relationship('workPattern', 'name')->preload()
                 ->helperText('Kosongkan untuk mengikuti unit induk atau pola default institusi.'),
         ]);

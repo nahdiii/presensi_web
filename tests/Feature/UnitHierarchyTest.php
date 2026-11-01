@@ -94,6 +94,22 @@ class UnitHierarchyTest extends TestCase
         $this->assertNull($this->faculty->fresh()->parent_id);
     }
 
+    public function test_unit_head_is_chosen_by_employee_name(): void
+    {
+        $this->actAsAdmin();
+        $head = $this->makeEmployee();
+        $head->user->update(['name' => 'Calon Kepala Unit']);
+
+        Livewire::test(ManageUnits::class)
+            ->mountAction(TestAction::make('edit')->table($this->prodi))
+            ->assertMountedActionModalSee('Calon Kepala Unit');
+        Livewire::test(ManageUnits::class)
+            ->callAction(TestAction::make('edit')->table($this->prodi), data: ['head_employee_id' => $head->id])
+            ->assertHasNoFormErrors();
+
+        $this->assertSame($head->id, $this->prodi->fresh()->head_employee_id);
+    }
+
     public function test_existing_loop_does_not_hang_and_can_be_repaired(): void
     {
         DB::table('units')->where('id', $this->faculty->id)->update(['parent_id' => $this->lab->id]);
