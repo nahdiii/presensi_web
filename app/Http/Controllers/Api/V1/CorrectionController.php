@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Enums\LeaveStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CorrectionResource;
+use App\Models\ActivityLog;
 use App\Models\Attendance;
 use App\Services\ApprovalNotifier;
 use Illuminate\Http\Request;
@@ -54,6 +55,7 @@ class CorrectionController extends Controller
             'attachment_path' => $path,
             'status' => LeaveStatus::Pending,
         ]);
+        ActivityLog::record($request->user(), 'request', "Mengajukan koreksi absen tanggal {$correction->date->translatedFormat('d M Y')}");
         app(ApprovalNotifier::class)->correctionSubmitted($correction);
 
         return new CorrectionResource($correction);

@@ -75,6 +75,12 @@ lihat `app/Enums/RejectReason.php`.
   (beserta sub-unit); menyetujui izin.
 - `pegawai`: hanya aplikasi mobile.
 
+Menu **Log Aktivitas** mencatat siapa melakukan apa dan kapan: masuk/keluar, absen,
+pengajuan, persetujuan, perubahan data, dan unduhan rekap. Log tidak bisa diubah atau
+dihapus. Setiap orang melihat log sendiri; `admin_sdm` juga melihat pegawai dan pimpinan
+unit, bukan sesama admin; `super_admin` melihat semuanya. Pekerjaan terjadwal tidak
+tercatat. Password tidak pernah disimpan di log.
+
 ## Deploy (Railway)
 
 `Dockerfile` di root adalah image produksi (FrankenPHP). Buat tiga service dari

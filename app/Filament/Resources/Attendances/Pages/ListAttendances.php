@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Attendances\Pages;
 use App\Exports\MonthlyAttendanceExport;
 use App\Filament\Resources\Attendances\AttendanceResource;
 use App\Jobs\RecalculateAttendances;
+use App\Models\ActivityLog;
 use App\Models\Employee;
 use App\Models\Unit;
 use App\Services\CorrectionService;
@@ -86,6 +87,7 @@ class ListAttendances extends ListRecords
                     'Hitung ulang '.($unit?->name ?? 'semua unit'),
                     $unit ? Employee::whereIn('unit_id', $unit->descendantIds())->pluck('id')->all() : null,
                     auth()->id());
+                ActivityLog::record(auth()->user(), 'report', "Menghitung ulang presensi {$data['from']} s.d. {$data['until']} (".($unit?->name ?? 'semua unit').')');
                 Notification::make()->title('Hitung ulang dimulai')->body('Anda akan diberi tahu bila sudah selesai.')->info()->send();
             });
     }
@@ -102,9 +104,13 @@ class ListAttendances extends ListRecords
         return Action::make('export')->label('Ekspor rekap bulanan')->icon(Heroicon::OutlinedArrowDownTray)
             ->schema([Select::make('month')->label('Bulan')->options($months)->default(array_key_first($months))->required()])
             ->modalSubmitActionLabel('Unduh .xlsx')
-            ->action(fn (array $data) => Excel::download(
-                new MonthlyAttendanceExport($data['month'], auth()->user()->supervisedUnitIds()),
-                "rekap-presensi-{$data['month']}.xlsx",
-            ));
+            ->action(function (array $data) {
+                ActivityLog::record(auth()->user(), 'report', "Mengunduh rekap presensi {$data['month']}");
+
+                return Excel::download(
+                    new MonthlyAttendanceExport($data['month'], auth()->user()->supervisedUnitIds()),
+                    "rekap-presensi-{$data['month']}.xlsx",
+                );
+            });
     }
 }

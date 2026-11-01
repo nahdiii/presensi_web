@@ -26,6 +26,14 @@ class User extends Authenticatable implements FilamentUser
 
     public const ROLE_EMPLOYEE = 'pegawai';
 
+    /** Urut dari peran tertinggi. */
+    public const ROLE_LABELS = [
+        self::ROLE_SUPER => 'Super Admin',
+        self::ROLE_ADMIN => 'Admin SDM',
+        self::ROLE_HEAD => 'Pimpinan unit',
+        self::ROLE_EMPLOYEE => 'Pegawai',
+    ];
+
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, HasRoles, Notifiable;
 
@@ -62,6 +70,18 @@ class User extends Authenticatable implements FilamentUser
     public function isSuperAdmin(): bool
     {
         return $this->hasRole(self::ROLE_SUPER);
+    }
+
+    /** Nama peran tertinggi pengguna. */
+    public function roleLabel(): string
+    {
+        foreach (self::ROLE_LABELS as $role => $label) {
+            if ($this->hasRole($role)) {
+                return $label;
+            }
+        }
+
+        return self::ROLE_LABELS[self::ROLE_EMPLOYEE];
     }
 
     /**

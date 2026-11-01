@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\LeaveStatus;
+use App\Models\ActivityLog;
 use App\Models\Attendance;
 use App\Models\AttendanceCorrection;
 use App\Models\Employee;
@@ -27,6 +28,7 @@ class CorrectionService
     public function approve(AttendanceCorrection $c, User $approver, ?string $note = null): Attendance
     {
         $row = $this->apply($c, $approver, $note, 'Dikoreksi');
+        ActivityLog::record($approver, 'review', "Menyetujui koreksi absen {$c->employee->name} tanggal {$c->date->translatedFormat('d M Y')}");
         $this->notify($c, true);
 
         return $row;
@@ -48,6 +50,7 @@ class CorrectionService
             'status' => LeaveStatus::Pending,
         ]);
         $row = $this->apply($c, $admin, "Dicatat manual oleh {$admin->name}", 'Dicatat manual');
+        ActivityLog::record($admin, 'attendance', "Mencatat presensi manual {$employee->name} tanggal {$c->date->translatedFormat('d M Y')}");
         $this->push->send($employee, 'Presensi dicatat oleh Admin SDM',
             $c->date->translatedFormat('d M Y').' · masuk '.substr($checkIn, 0, 5).($checkOut ? ', pulang '.substr($checkOut, 0, 5) : '').'.',
             ['type' => 'correction', 'id' => (string) $c->id]);
@@ -93,6 +96,7 @@ class CorrectionService
     public function reject(AttendanceCorrection $c, User $approver, string $note): void
     {
         $c->update(['status' => LeaveStatus::Rejected, 'approved_by' => $approver->id, 'approved_at' => now(), 'review_note' => $note]);
+        ActivityLog::record($approver, 'review', "Menolak koreksi absen {$c->employee->name} tanggal {$c->date->translatedFormat('d M Y')}");
         $this->notify($c, false);
     }
 

@@ -7,6 +7,7 @@ use App\Enums\AttendanceType;
 use App\Enums\RejectReason;
 use App\Exceptions\AttendanceRejected;
 use App\Jobs\ProcessAttendancePhoto;
+use App\Models\ActivityLog;
 use App\Models\Attendance;
 use App\Models\AttendanceAttempt;
 use App\Models\Device;
@@ -102,6 +103,8 @@ class AttendanceService
 
             $this->queuePhoto($photo);
             app(PresenceCheckService::class)->planFor($attendance->refresh(), $employee);
+            ActivityLog::record($employee->user, 'attendance', "Absen masuk pukul {$now->format('H:i')} di {$office->name}"
+                .($attendance->late_minutes ? " (terlambat {$attendance->late_minutes} menit)" : ''));
 
             return $attendance;
         });
@@ -160,6 +163,7 @@ class AttendanceService
             $this->queuePhoto($photo);
             app(ExitPermitService::class)->closeActive($employee, $now);
             app(PresenceCheckService::class)->cancelRemaining($attendance);
+            ActivityLog::record($employee->user, 'attendance', "Absen pulang pukul {$now->format('H:i')} di {$office->name}");
 
             return $attendance->refresh();
         });

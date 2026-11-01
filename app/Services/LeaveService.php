@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\LeaveStatus;
 use App\Enums\LeaveType;
+use App\Models\ActivityLog;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\LeaveRequest;
@@ -62,7 +63,7 @@ class LeaveService
             }
         }
 
-        return $employee->leaveRequests()->create([
+        $leave = $employee->leaveRequests()->create([
             'institution_id' => $employee->institution_id,
             'type' => $type,
             'start_date' => $start->toDateString(),
@@ -72,6 +73,9 @@ class LeaveService
             'attachment_path' => $attachmentPath,
             'status' => LeaveStatus::Pending,
         ]);
+        ActivityLog::record($employee->user, 'request', "Mengajukan {$type->getLabel()} {$this->range($leave)}");
+
+        return $leave;
     }
 
     /**
@@ -152,6 +156,7 @@ class LeaveService
                     'note' => $leave->type->getLabel().': '.str($leave->reason)->limit(150),
                 ])->save();
             }
+            ActivityLog::record($approver, 'review', "Menyetujui {$leave->type->getLabel()} {$employee->name} {$this->range($leave)}");
         });
 
         $this->notify($leave, true);
@@ -165,6 +170,7 @@ class LeaveService
             'approved_at' => now(),
             'review_note' => $note,
         ]);
+        ActivityLog::record($approver, 'review', "Menolak {$leave->type->getLabel()} {$leave->employee->name} {$this->range($leave)}");
         $this->notify($leave, false);
     }
 

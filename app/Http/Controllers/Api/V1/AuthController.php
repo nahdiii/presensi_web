@@ -6,6 +6,7 @@ use App\Enums\RejectReason;
 use App\Exceptions\AttendanceRejected;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\MeResource;
+use App\Models\ActivityLog;
 use App\Models\Device;
 use App\Models\Employee;
 use App\Models\User;
@@ -68,6 +69,7 @@ class AuthController extends Controller
         });
 
         $token = $user->createToken('device:'.$device->id)->plainTextToken;
+        ActivityLog::record($user, 'login', 'Masuk ke aplikasi mobile'.($device->model ? " ({$device->model})" : ''));
 
         return response()->json(['data' => [
             'token' => $token,
@@ -81,6 +83,7 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()->delete();
         // HP yang sudah logout tidak boleh lagi menerima notifikasi akun ini.
         $request->user()->employee?->activeDevice?->update(['fcm_token' => null]);
+        ActivityLog::record($request->user(), 'logout', 'Keluar dari aplikasi mobile');
 
         return response()->json(['data' => ['ok' => true]]);
     }

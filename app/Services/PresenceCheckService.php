@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\AttendanceType;
 use App\Enums\RejectReason;
 use App\Exceptions\AttendanceRejected;
+use App\Models\ActivityLog;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\PresenceCheck;
@@ -162,6 +163,7 @@ class PresenceCheckService
                 'lat' => $p->lat, 'lng' => $p->lng, 'accuracy_m' => $p->accuracy, 'photo_path' => $photo,
             ]);
             $this->attendance->queuePhoto($photo);
+            ActivityLog::record($employee->user, 'attendance', "Menjawab cek kehadiran acak di {$office->name}");
 
             return $check;
         });

@@ -3,6 +3,8 @@
 namespace App\Filament\Resources\Employees\Pages;
 
 use App\Filament\Resources\Employees\EmployeeResource;
+use App\Models\ActivityLog;
+use App\Models\User;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -35,7 +37,7 @@ class EditEmployee extends EditRecord
                     $user->password = $data['user_password'];
                 }
                 $user->save();
-                $user->syncRoles($data['user_roles']);
+                $this->syncRoles($user, $data['user_roles']);
                 if (! $user->is_active) {
                     $user->tokens()->delete();
                 }
@@ -44,5 +46,16 @@ class EditEmployee extends EditRecord
 
             return $record;
         });
+    }
+
+    /** @param  array<int, string>  $roles */
+    private function syncRoles(User $user, array $roles): void
+    {
+        $before = $user->getRoleNames()->all();
+        $user->syncRoles($roles);
+        if (array_diff($before, $roles) || array_diff($roles, $before)) {
+            $labels = fn (array $names) => collect($names)->map(fn (string $name) => User::ROLE_LABELS[$name])->join(', ');
+            ActivityLog::record(auth()->user(), 'account', "Mengubah peran {$user->name}", ['roles' => [$labels($before), $labels($roles)]]);
+        }
     }
 }

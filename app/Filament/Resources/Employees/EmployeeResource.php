@@ -8,6 +8,7 @@ use App\Filament\Concerns\ScopedToSupervisedUnits;
 use App\Filament\Resources\Employees\Pages\CreateEmployee;
 use App\Filament\Resources\Employees\Pages\EditEmployee;
 use App\Filament\Resources\Employees\Pages\ListEmployees;
+use App\Models\ActivityLog;
 use App\Models\Employee;
 use App\Models\Unit;
 use App\Models\User;
@@ -155,6 +156,7 @@ class EmployeeResource extends Resource
                     ->requiresConfirmation()
                     ->modalDescription(fn (Employee $r) => "Perangkat {$r->activeDevice?->model} akan dilepas dan {$r->user->name} keluar dari aplikasi. Login berikutnya akan mengikat HP baru.")
                     ->action(function (Employee $r) {
+                        ActivityLog::record(auth()->user(), 'account', "Mereset perangkat {$r->user->name} ({$r->activeDevice?->model})");
                         $r->resetDevice();
                         Notification::make()->title('Perangkat direset')->success()->send();
                     }),

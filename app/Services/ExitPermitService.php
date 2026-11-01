@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\LeaveStatus;
 use App\Enums\RejectReason;
 use App\Exceptions\AttendanceRejected;
+use App\Models\ActivityLog;
 use App\Models\Employee;
 use App\Models\ExitPermit;
 use App\Models\User;
@@ -48,6 +49,7 @@ class ExitPermitService
             'out_at' => $now,
             'status' => LeaveStatus::Pending,
         ]);
+        ActivityLog::record($employee->user, 'request', "Izin keluar kampus: {$reason}");
         app(ApprovalNotifier::class)->exitPermitStarted($permit);
 
         return $permit;
@@ -64,6 +66,7 @@ class ExitPermitService
                 ?? throw new AttendanceRejected(RejectReason::NoExitPermit, 'Tidak ada izin keluar yang sedang aktif.');
             [, $distance] = $this->attendance->assertLocation($employee, $p, $ctx);
             $permit->update(['back_at' => now(), 'back_distance_m' => round($distance, 2)]);
+            ActivityLog::record($employee->user, 'attendance', 'Kembali ke kampus dari izin keluar');
 
             return $permit;
         });
@@ -83,6 +86,7 @@ class ExitPermitService
             'approved_at' => now(),
             'review_note' => $note,
         ]);
+        ActivityLog::record($approver, 'review', ($approve ? 'Menyetujui' : 'Menolak')." izin keluar {$permit->employee->name}");
         $this->push->send($permit->employee, 'Izin keluar '.($approve ? 'disetujui' : 'ditolak'),
             $note ?: 'Izin keluar pukul '.$permit->out_at->setTimezone(config('attendance.timezone'))->format('H:i').' sudah diputuskan.',
             ['type' => 'exit_permit', 'id' => (string) $permit->id]);
