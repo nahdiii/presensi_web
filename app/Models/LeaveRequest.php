@@ -5,10 +5,12 @@ namespace App\Models;
 use App\Enums\LeaveStatus;
 use App\Enums\LeaveType;
 use App\Models\Concerns\BelongsToInstitution;
+use App\Services\LeaveService;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Satu pengajuan untuk satu pegawai. Izin bersama membuat satu pengajuan per
@@ -56,6 +58,44 @@ class LeaveRequest extends Model
     public function similarTo(): BelongsTo
     {
         return $this->belongsTo(self::class, 'similar_leave_request_id');
+    }
+
+    /** Baris presensi yang ditulis saat pengajuan ini disetujui. */
+    public function attendances(): HasMany
+    {
+        return $this->hasMany(Attendance::class);
+    }
+
+    /**
+     * Potongan pengajuan ini. Setelah disetujui: jumlah potongan yang benar-benar
+     * tercatat di presensi (final). Selama menunggu: perkiraan hari kerja ×
+     * nominal jenisnya pada aturan yang berlaku di tanggal mulai. Ditolak: 0.
+     *
+     * @return array{amount: int, final: bool}
+     */
+    public function deductionSummary(): array
+    {
+        return match ($this->status) {
+            LeaveStatus::Approved => ['amount' => (int) $this->attendances->sum('deduction_amount'), 'final' => true],
+            LeaveStatus::Rejected => ['amount' => 0, 'final' => true],
+            default => ['amount' => ($this->days ?? app(LeaveService::class)->workdays(
+                $this->employee, $this->start_date->toImmutable(), $this->end_date->toImmutable()))
+                * (DeductionRuleSet::forDate($this->institution_id, $this->start_date->toDateString())?->leaveAmount($this->type) ?? 0),
+                'final' => false],
+        };
+    }
+
+    /** URL bertanda tangan untuk melihat lampiran, berlaku sebentar. */
+    public function attachmentUrl(int $minutes = 10): ?string
+    {
+        return $this->attachment_path
+            ? Storage::disk(config('attendance.photo_disk'))->temporaryUrl($this->attachment_path, now()->addMinutes($minutes))
+            : null;
+    }
+
+    public function attachmentIsImage(): bool
+    {
+        return in_array(strtolower(pathinfo((string) $this->attachment_path, PATHINFO_EXTENSION)), ['jpg', 'jpeg', 'png'], true);
     }
 
     public function isSubmittedByOther(): bool

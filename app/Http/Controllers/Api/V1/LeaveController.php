@@ -27,7 +27,8 @@ class LeaveController extends Controller
         $rules = DeductionRuleSet::forDate($employee->institution_id, $today->toDateString());
 
         return LeaveRequestResource::collection($employee->leaveRequests()
-            ->with(['approver', 'submitter.user', 'groupMembers.employee.user'])->latest()->limit(100)->get())
+            ->with(['approver', 'submitter.user', 'groupMembers.employee.user', 'groupMembers.employee.unit', 'attendances'])
+            ->latest()->limit(100)->get())
             ->additional(['meta' => [
                 'leave_quota' => app(LeaveService::class)->quota($employee, $today->year),
                 'leave_deductions' => collect(LeaveType::cases())->mapWithKeys(fn (LeaveType $t) => [$t->value => $rules?->leaveAmount($t) ?? 0]),
@@ -62,7 +63,7 @@ class LeaveController extends Controller
         $leaves = app(LeaveService::class)->submit($employee, $data, $request->file('attachment'), $members);
         app(ApprovalNotifier::class)->leavesSubmitted($leaves);
 
-        return new LeaveRequestResource($leaves->first()->load(['submitter.user', 'groupMembers.employee.user']));
+        return new LeaveRequestResource($leaves->first()->load(['submitter.user', 'groupMembers.employee.user', 'groupMembers.employee.unit']));
     }
 
     /** Cari rekan untuk izin bersama: nama atau NIP, paling sedikit 2 huruf. */

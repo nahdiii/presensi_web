@@ -203,6 +203,12 @@ class LeaveService
         return ['year' => $year, 'quota' => $quota, 'used' => $used, 'pending' => $pending, 'remaining' => max(0, $quota - $used - $pending)];
     }
 
+    /** Jumlah hari kerja pegawai dalam rentang (bukan libur menurut jadwal/kalender). */
+    public function workdays(Employee $employee, CarbonImmutable $start, CarbonImmutable $end): int
+    {
+        return array_sum($this->workdaysPerYear($employee, $start, $end));
+    }
+
     /** @return array<int, int> hari kerja (bukan libur menurut jadwal/kalender) per tahun */
     private function workdaysPerYear(Employee $employee, CarbonImmutable $start, CarbonImmutable $end): array
     {

@@ -318,6 +318,58 @@ class LeaveGroupTest extends TestCase
         Livewire::test(ListLeaveRequests::class)->assertSee("Mirip lampiran {$a->name}");
     }
 
+    public function test_admin_opens_leave_detail_and_approves_from_it(): void
+    {
+        $this->rules(['tugas_luar' => 10000]);
+        $a = $this->makeEmployee();
+        $b = $this->makeEmployee();
+        $this->submit($a, ['member_ids' => [$b->id], 'attachment' => $this->image(3)])->assertCreated();
+        [$mine, $theirs] = LeaveRequest::orderBy('id')->get()->all();
+        $admin = User::create(['institution_id' => $this->inst->id, 'name' => 'Admin', 'email' => 'a@kampus.test', 'password' => 'x']);
+        $admin->assignRole(User::ROLE_ADMIN);
+        $this->actingAs($admin);
+
+        Livewire::test(ListLeaveRequests::class)
+            ->mountTableAction('view', $theirs)
+            ->assertMountedActionModalSee([
+                'Seminar nasional', 'Rp20.000', // Perkiraan: 2 hari kerja × Rp10.000.
+                'Izin bersama', $a->name, 'Pengaju', 'Lampiran pengajuan ini', 'Setujui', 'Tolak',
+            ]);
+
+        // Setujui langsung dari detail.
+        Livewire::test(ListLeaveRequests::class)
+            ->mountTableAction(['view', 'approveFromDetail'], $theirs)
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+        $this->assertSame(LeaveStatus::Approved, $theirs->fresh()->status);
+        $this->assertSame(LeaveStatus::Pending, $mine->fresh()->status);
+        $this->assertSame(['amount' => 20000, 'final' => true], $theirs->fresh()->load('attendances')->deductionSummary());
+    }
+
+    public function test_leave_list_api_has_detail_fields(): void
+    {
+        $this->rules(['tugas_luar' => 10000]);
+        $a = $this->makeEmployee();
+        $b = $this->makeEmployee();
+        $this->submit($a, ['member_ids' => [$b->id], 'attachment' => $this->image(5)])->assertCreated();
+        LeaveRequest::where('employee_id', $b->id)->sole()->update(['status' => LeaveStatus::Rejected, 'review_note' => 'Tidak ikut']);
+
+        Sanctum::actingAs($a->user);
+        $this->withHeader('X-Device-UID', $this->deviceUids[$a->id])->getJson('/api/v1/leaves')->assertOk()
+            ->assertJsonPath('data.0.deduction', ['amount' => 20000, 'final' => false])
+            ->assertJsonPath('data.0.attachment_is_image', true)
+            ->assertJsonPath('data.0.attachment_url', fn ($url) => is_string($url) && $url !== '')
+            ->assertJsonPath('data.0.group.0.name', $b->name)
+            ->assertJsonPath('data.0.group.0.status', 'rejected')
+            ->assertJsonPath('data.0.group.0.status_label', 'Ditolak')
+            ->assertJsonPath('data.0.group.0.unit_name', 'Biro SDM');
+
+        Sanctum::actingAs($b->user);
+        $this->withHeader('X-Device-UID', $this->deviceUids[$b->id])->getJson('/api/v1/leaves')->assertOk()
+            ->assertJsonPath('data.0.review_note', 'Tidak ikut')
+            ->assertJsonPath('data.0.deduction', ['amount' => 0, 'final' => true]);
+    }
+
     public function test_perceptual_hash_distance(): void
     {
         $this->assertSame(0, AttachmentFingerprint::distance('ffffffffffffffff', 'ffffffffffffffff'));

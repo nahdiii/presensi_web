@@ -20,11 +20,23 @@ class LeaveRequestResource extends JsonResource
             'days' => $this->days,
             'reason' => $this->reason,
             'has_attachment' => $this->attachment_path !== null,
+            'attachment_url' => $this->attachmentUrl(),
+            'attachment_is_image' => $this->attachment_path !== null && $this->attachmentIsImage(),
             // Izin bersama: siapa yang mengisi (bila bukan diri sendiri) dan rekan lain di dalamnya.
             'submitted_by_name' => $this->isSubmittedByOther() ? $this->submitter?->name : null,
             'group_members' => $this->group_id
                 ? $this->groupMembers->where('id', '!=', $this->id)->map(fn ($l) => $l->employee->name)->values()
                 : [],
+            // Rincian rekan dalam izin bersama: masing-masing diputuskan kepala unitnya sendiri.
+            'group' => $this->group_id
+                ? $this->groupMembers->where('id', '!=', $this->id)->map(fn ($l) => [
+                    'name' => $l->employee->name,
+                    'unit_name' => $l->employee->unit?->name,
+                    'status' => $l->status,
+                    'status_label' => $l->status->getLabel(),
+                ])->values()
+                : [],
+            'deduction' => $this->deductionSummary(),
             'status' => $this->status,
             'approved_by_name' => $this->approver?->name,
             'approved_at' => $this->approved_at?->toIso8601String(),
