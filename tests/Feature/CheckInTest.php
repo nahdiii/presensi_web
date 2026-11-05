@@ -4,9 +4,12 @@ namespace Tests\Feature;
 
 use App\Enums\AttendanceStatus;
 use App\Enums\AttendanceType;
+use App\Enums\LeaveStatus;
 use App\Enums\WorkPatternType;
 use App\Models\Attendance;
 use App\Models\AttendanceAttempt;
+use App\Models\Employee;
+use App\Models\LeaveRequest;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -337,6 +340,37 @@ class CheckInTest extends TestCase
         $get('from=2025-10-01&to=2026-10-02')->assertUnprocessable()
             ->assertJsonPath('error.message', 'Rentang tanggal maksimal satu tahun.');
         $get('from=2025-10-01&to=2026-10-01')->assertOk();
+    }
+
+    public function test_check_in_is_rejected_on_approved_leave_day(): void
+    {
+        $onLeave = $this->makeEmployee();
+        $pending = $this->makeEmployee();
+        $otherDay = $this->makeEmployee();
+        $leave = fn (Employee $e, string $type, string $from, string $to, LeaveStatus $status) => LeaveRequest::create([
+            'institution_id' => $this->inst->id, 'employee_id' => $e->id, 'type' => $type,
+            'start_date' => $from, 'end_date' => $to, 'reason' => 'x', 'status' => $status,
+        ]);
+        $leave($onLeave, 'cuti', '2026-10-27', '2026-10-29', LeaveStatus::Approved);
+        $leave($pending, 'izin', '2026-10-28', '2026-10-28', LeaveStatus::Pending);
+        $leave($otherDay, 'sakit', '2026-10-29', '2026-10-29', LeaveStatus::Approved);
+        $this->at('2026-10-28 07:20');
+
+        // Ditolak walaupun di luar kampus: pesannya tentang cutinya, bukan jarak.
+        $this->punch($onLeave, 'in', ['latitude' => self::LAT + 0.05])->assertStatus(422)
+            ->assertJsonPath('error.code', 'on_leave')
+            ->assertJsonPath('error.message', 'Anda sedang Cuti (27 Okt – 29 Okt 2026) yang sudah disetujui, jadi tidak perlu absen.');
+        $this->assertSame('on_leave', AttendanceAttempt::where('employee_id', $onLeave->id)->sole()->reason->value);
+        $this->assertNull(Attendance::where('employee_id', $onLeave->id)->whereNotNull('check_in_at')->first());
+
+        Sanctum::actingAs($onLeave->user);
+        $this->withHeader('X-Device-UID', $this->deviceUids[$onLeave->id])->getJson('/api/v1/attendance/today')
+            ->assertOk()->assertJsonPath('data.next_action', 'on_leave')
+            ->assertJsonPath('data.next_action_message', 'Anda sedang Cuti (27 Okt – 29 Okt 2026) yang sudah disetujui, jadi tidak perlu absen.');
+
+        // Masih menunggu persetujuan, atau izinnya hari lain: tetap bisa absen.
+        $this->punch($pending)->assertCreated();
+        $this->punch($otherDay)->assertCreated();
     }
 
     public function test_today_reports_next_action(): void

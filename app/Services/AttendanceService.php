@@ -12,6 +12,7 @@ use App\Models\Attendance;
 use App\Models\AttendanceAttempt;
 use App\Models\Device;
 use App\Models\Employee;
+use App\Models\LeaveRequest;
 use App\Models\Office;
 use App\Support\DaySchedule;
 use App\Support\PunchData;
@@ -42,6 +43,12 @@ class AttendanceService
             if ($employee->attendance_type->effective() === AttendanceType::Session) {
                 throw new AttendanceRejected(RejectReason::OutsideWindow,
                     'Presensi Anda dihitung per sesi mengajar. Absen lewat jadwal mengajar di beranda.');
+            }
+            // Izin/cuti yang sudah disetujui dicek sebelum lokasi: pegawai yang sedang
+            // cuti biasanya tidak di kampus, jadi pesannya harus tentang cutinya.
+            [$leaveDate] = $this->checkInDay($employee, CarbonImmutable::now($employee->offices->first()?->timezone ?? config('attendance.timezone')));
+            if ($leave = LeaveRequest::approvedOn($employee, $leaveDate)) {
+                throw new AttendanceRejected(RejectReason::OnLeave, $leave->onLeaveMessage());
             }
             [$office, $distance] = $this->assertLocation($employee, $p, $ctx);
             $now = CarbonImmutable::now($office->timezone);
@@ -187,9 +194,12 @@ class AttendanceService
             $attendance = Attendance::where('employee_id', $employee->id)->whereDate('date', $date)->first();
         }
 
-        [$action, $message] = $employee->attendance_type->effective() === AttendanceType::Session
-            ? ['sessions', 'Presensi Anda dihitung per sesi mengajar.']
-            : $this->nextAction($attendance, $schedule, $date, $tz, $now);
+        $leave = $attendance?->check_in_at ? null : LeaveRequest::approvedOn($employee, $date);
+        [$action, $message] = match (true) {
+            $leave !== null => ['on_leave', $leave->onLeaveMessage()],
+            $employee->attendance_type->effective() === AttendanceType::Session => ['sessions', 'Presensi Anda dihitung per sesi mengajar.'],
+            default => $this->nextAction($attendance, $schedule, $date, $tz, $now),
+        };
 
         return compact('date', 'now', 'tz', 'schedule', 'attendance', 'action', 'message');
     }

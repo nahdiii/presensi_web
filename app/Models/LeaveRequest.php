@@ -131,6 +131,20 @@ class LeaveRequest extends Model
         return $this->submitted_by !== null && $this->submitted_by !== $this->employee_id;
     }
 
+    /** Pengajuan yang sudah disetujui dan mencakup tanggal ini. */
+    public static function approvedOn(Employee $employee, string $date): ?self
+    {
+        return self::with('leaveType')->where('employee_id', $employee->id)->where('status', LeaveStatus::Approved)
+            ->whereDate('start_date', '<=', $date)->whereDate('end_date', '>=', $date)
+            ->first();
+    }
+
+    /** Pesan untuk pegawai yang mencoba absen pada hari izinnya. */
+    public function onLeaveMessage(): string
+    {
+        return "Anda sedang {$this->typeLabel()} ({$this->rangeLabel()}) yang sudah disetujui, jadi tidak perlu absen.";
+    }
+
     /** "3 Nov 2026" atau "3 Nov – 4 Nov 2026". */
     public function rangeLabel(): string
     {

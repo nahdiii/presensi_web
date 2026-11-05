@@ -22,6 +22,7 @@ enum RejectReason: string implements HasLabel
     case CheckExpired = 'check_expired';
     case ExitPermitActive = 'exit_permit_active';
     case NoExitPermit = 'no_exit_permit';
+    case OnLeave = 'on_leave';
 
     public function getLabel(): string
     {
@@ -41,6 +42,7 @@ enum RejectReason: string implements HasLabel
             self::CheckExpired => 'Cek kehadiran kedaluwarsa',
             self::ExitPermitActive => 'Masih izin keluar',
             self::NoExitPermit => 'Tidak ada izin keluar aktif',
+            self::OnLeave => 'Sedang izin/cuti',
         };
     }
 

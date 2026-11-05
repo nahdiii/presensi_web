@@ -263,7 +263,7 @@ class TeachingSessionTest extends TestCase
     public function test_leave_marks_session_as_off_on_home(): void
     {
         $e = $this->lecturer();
-        $this->schedule($e);
+        $s = $this->schedule($e);
         LeaveRequest::create(['institution_id' => $this->inst->id, 'employee_id' => $e->id, 'type' => 'sakit',
             'start_date' => '2026-10-28', 'end_date' => '2026-10-28', 'reason' => 'Demam', 'status' => LeaveStatus::Approved]);
         $this->at('2026-10-28 08:00');
@@ -272,6 +272,9 @@ class TeachingSessionTest extends TestCase
         $this->withHeader('X-Device-UID', $this->deviceUids[$e->id])->getJson('/api/v1/teaching/today')
             ->assertJsonPath('data.0.state', 'off')
             ->assertJsonPath('data.0.message', 'Sakit');
+
+        // Absen sesinya juga ditolak.
+        $this->sessionPunch($e, $s)->assertStatus(422)->assertJsonPath('error.code', 'on_leave');
     }
 
     // ---------- Tutup hari ----------

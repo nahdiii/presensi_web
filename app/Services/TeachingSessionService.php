@@ -76,6 +76,9 @@ class TeachingSessionService
             if ($holiday = $this->holiday($employee, $date)) {
                 throw new AttendanceRejected(RejectReason::OutsideWindow, "Hari ini libur ($holiday->name).");
             }
+            if ($leave = LeaveRequest::approvedOn($employee, $date)) {
+                throw new AttendanceRejected(RejectReason::OnLeave, $leave->onLeaveMessage());
+            }
             $existing = TeachingSession::where('teaching_schedule_id', $schedule->id)->whereDate('date', $date)->first();
             if ($existing?->checked_in_at) {
                 throw new AttendanceRejected(RejectReason::AlreadyCheckedIn,
