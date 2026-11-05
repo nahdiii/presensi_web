@@ -32,6 +32,8 @@ class LeaveController extends Controller
                 'leave_quota' => app(LeaveService::class)->quota($employee, $today->year),
                 'leave_deductions' => collect(LeaveType::cases())->mapWithKeys(fn (LeaveType $t) => [$t->value => $rules?->leaveAmount($t) ?? 0]),
                 'group_types' => collect(LeaveType::cases())->filter->allowsGroup()->map->value->values(),
+                'earliest_start_date' => LeaveService::earliestStart()->toDateString(),
+                'backdate_window_days' => config('attendance.leave.backdate_window_days'),
             ]]);
     }
 

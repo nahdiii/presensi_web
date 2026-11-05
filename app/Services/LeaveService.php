@@ -96,14 +96,13 @@ class LeaveService
         $fail = fn (string $field, string $message) => throw ValidationException::withMessages([
             $isMember ? 'member_ids' : $field => $isMember ? "{$e->name}: ".lcfirst($message) : $message,
         ]);
-        $today = CarbonImmutable::now(config('attendance.timezone'))->startOfDay();
-        $backdate = config('attendance.leave.max_backdate_days');
 
         if ($isMember && ! $e->user?->is_active) {
             $fail('member_ids', 'Akun tidak aktif.');
         }
-        if ($start->lt($today->subDays($backdate))) {
-            $fail('start_date', "Tanggal mulai paling lama $backdate hari ke belakang.");
+        if ($start->lt($earliest = self::earliestStart())) {
+            $fail('start_date', "Tanggal mulai paling awal {$earliest->translatedFormat('d M Y')}. Izin hanya bisa diajukan paling lama "
+                .config('attendance.leave.backdate_window_days').' hari ke belakang, termasuk hari ini.');
         }
         $clash = $e->leaveRequests()
             ->whereIn('status', [LeaveStatus::Pending, LeaveStatus::Approved])
@@ -169,6 +168,13 @@ class LeaveService
         }
 
         return [$hash, $phash, $similar];
+    }
+
+    /** Tanggal mulai paling awal yang boleh diajukan hari ini. */
+    public static function earliestStart(): CarbonImmutable
+    {
+        return CarbonImmutable::now(config('attendance.timezone'))->startOfDay()
+            ->subDays(max(1, config('attendance.leave.backdate_window_days')) - 1);
     }
 
     /**

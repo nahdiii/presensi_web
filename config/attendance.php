@@ -58,7 +58,9 @@ return [
     // kerja per tahun kalender; bisa diganti per pegawai di panel admin.
     'leave' => [
         'annual_quota_days' => (int) env('ATTENDANCE_ANNUAL_LEAVE_DAYS', 12),
-        'max_backdate_days' => 7,
+        // Pengajuan paling lama sekian hari ke belakang, termasuk hari ini:
+        // 3 berarti pada tanggal 4 tanggal mulai paling awal tanggal 2.
+        'backdate_window_days' => (int) env('ATTENDANCE_LEAVE_BACKDATE_DAYS', 3),
     ],
 
     // Batas umur koreksi lupa absen (hari ke belakang).

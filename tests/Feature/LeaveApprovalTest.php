@@ -62,13 +62,19 @@ class LeaveApprovalTest extends TestCase
 
     // ---------- Validasi & jatah cuti ----------
 
-    public function test_leave_cannot_be_backdated_too_far(): void
+    public function test_leave_cannot_be_backdated_more_than_three_days_including_today(): void
     {
         $e = $this->makeEmployee();
+        $this->at('2026-11-04 09:00'); // Rabu: paling awal Senin 2 Nov.
 
-        $this->submit($e, ['type' => 'sakit', 'start_date' => '2026-10-20', 'end_date' => '2026-10-20'])
-            ->assertStatus(422)->assertJsonPath('error.message', 'Tanggal mulai paling lama 7 hari ke belakang.');
-        $this->submit($e, ['type' => 'sakit', 'start_date' => '2026-10-21', 'end_date' => '2026-10-21'])->assertCreated();
+        $this->submit($e, ['type' => 'sakit', 'start_date' => '2026-11-01', 'end_date' => '2026-11-02'])
+            ->assertStatus(422)->assertJsonPath('error.message',
+                'Tanggal mulai paling awal 02 Nov 2026. Izin hanya bisa diajukan paling lama 3 hari ke belakang, termasuk hari ini.');
+        $this->submit($e, ['type' => 'sakit', 'start_date' => '2026-11-02', 'end_date' => '2026-11-02'])->assertCreated();
+
+        Sanctum::actingAs($e->user);
+        $this->withHeader('X-Device-UID', $this->deviceUids[$e->id])->getJson('/api/v1/leaves')
+            ->assertJsonPath('meta.earliest_start_date', '2026-11-02')->assertJsonPath('meta.backdate_window_days', 3);
     }
 
     public function test_overlapping_leave_is_rejected_but_rejected_one_frees_the_dates(): void

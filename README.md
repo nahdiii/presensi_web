@@ -108,8 +108,9 @@ menyegarkan status setiap menit selama aplikasi terbuka.
 
 ## Izin, persetujuan, dan presensi manual
 
-- **Pengajuan izin** (`POST /leaves`) ditolak bila tanggal mulai lebih dari 7 hari ke
-  belakang, bertumpuk dengan pengajuan lain yang menunggu/disetujui, atau rentangnya
+- **Pengajuan izin** (`POST /leaves`) ditolak bila tanggal mulai lebih dari 3 hari ke
+  belakang termasuk hari ini (tanggal 4 → paling awal tanggal 2; `ATTENDANCE_LEAVE_BACKDATE_DAYS`,
+  `meta.earliest_start_date` di `GET /leaves`), bertumpuk dengan pengajuan lain yang menunggu/disetujui, atau rentangnya
   tidak berisi hari kerja. Jumlah hari kerja disimpan di `leave_requests.days`.
 - **Jatah cuti tahunan** dihitung dalam hari kerja per tahun kalender: bawaan 12
   (`ATTENDANCE_ANNUAL_LEAVE_DAYS`), bisa diganti per pegawai di form Pegawai. Cuti
