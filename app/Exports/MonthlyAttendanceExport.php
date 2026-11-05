@@ -34,7 +34,7 @@ class MonthlyAttendanceExport implements Export, WithMultipleSheets
             ->sortBy(fn (Employee $e) => [$e->unit?->name, $e->user->name])
             ->values();
 
-        $attendances = Attendance::with(['checkInOffice', 'checkOutOffice'])
+        $attendances = Attendance::with(['checkInOffice', 'checkOutOffice', 'leaveRequest'])
             ->whereIn('employee_id', $employees->pluck('id'))
             ->whereDate('date', '>=', $start->toDateString())
             ->whereDate('date', '<=', $end->toDateString())
@@ -90,13 +90,11 @@ class MonthlyAttendanceExport implements Export, WithMultipleSheets
         })->all();
     }
 
-    /** Jumlah hari per kode, mis. "TL1×3, PSW2×1, Alpa×1". */
+    /** Jumlah hari per sebab potongan, mis. "Alpa×1, Izin×2, PSW2×1, TL1×3". */
     private function codeSummary(Collection $rows): string
     {
-        return $rows->flatMap(fn (Attendance $a) => array_filter([
-            $a->late_code, $a->early_leave_code,
-            $a->status === AttendanceStatus::Absent && $a->deduction_amount > 0 ? 'Alpa' : null,
-        ]))->countBy()->sortKeys()->map(fn ($n, $code) => "{$code}×{$n}")->implode(', ');
+        return $rows->flatMap(fn (Attendance $a) => $a->deductionCodes())
+            ->countBy()->sortKeys()->map(fn ($n, $code) => "{$code}×{$n}")->implode(', ');
     }
 
     private function sessionHeadings(): array
@@ -143,7 +141,7 @@ class MonthlyAttendanceExport implements Export, WithMultipleSheets
                     $a->check_in_at?->setTimezone($tz)->format('H:i'), $a->checkInOffice?->name, $a->check_in_distance_m,
                     $a->check_out_at?->setTimezone($a->checkOutOffice?->timezone ?? $tz)->format('H:i'), $a->checkOutOffice?->name,
                     $a->late_minutes, $a->worked_minutes, $a->early_leave_minutes,
-                    collect([$a->late_code, $a->early_leave_code])->filter()->implode(', '), $a->deduction_amount, $a->note,
+                    implode(', ', $a->deductionCodes()), $a->deduction_amount, $a->note,
                 ];
             }
         }

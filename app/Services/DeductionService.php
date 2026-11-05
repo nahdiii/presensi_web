@@ -7,7 +7,9 @@ use App\Models\Attendance;
 use App\Models\DeductionRuleSet;
 
 /**
- * Potongan harian (rupiah) dari menit terlambat dan menit pulang cepat.
+ * Potongan harian (rupiah) dari menit terlambat dan menit pulang cepat,
+ * alpa, atau hari izin/sakit/cuti/tugas luar (nominal per hari kerja per
+ * jenis; jenisnya diambil dari pengajuan di leave_request_id).
  * Tidak ada menit yang diisi tangan: keduanya dihitung dari jadwal yang
  * berlaku hari itu (AttendanceService::applyTimes), lalu dipetakan ke
  * tingkat TL/PSW dari aturan yang berlaku pada tanggal presensi.
@@ -21,10 +23,12 @@ class DeductionService
     public function apply(Attendance $a): void
     {
         $a->fill(['late_code' => null, 'early_leave_code' => null, 'deduction_amount' => 0, 'deduction_rule_set_id' => null]);
+        if ($a->isDirty('leave_request_id')) {
+            $a->unsetRelation('leaveRequest');
+        }
 
-        $counted = [AttendanceStatus::Present, AttendanceStatus::Late, AttendanceStatus::Incomplete, AttendanceStatus::Absent];
-        if (! in_array($a->status, $counted, true) || ! $a->institution_id || ! $a->date) {
-            return; // Izin, sakit, tugas luar, dan libur tidak dipotong.
+        if ($a->status === AttendanceStatus::Holiday || ! $a->status || ! $a->institution_id || ! $a->date) {
+            return; // Libur tidak dipotong.
         }
         $rules = DeductionRuleSet::forDate($a->institution_id, $a->date->toDateString());
         if (! $rules) {
@@ -34,6 +38,9 @@ class DeductionService
         $amount = 0;
         if ($a->status === AttendanceStatus::Absent) {
             $amount = $rules->absent_amount;
+        } elseif ($type = $a->leaveType()) {
+            // Izin, sakit, cuti, tugas luar: nominal per hari kerja sesuai jenisnya.
+            $amount = $rules->leaveAmount($type);
         } else {
             if ($tier = DeductionRuleSet::tierFor($rules->late_tiers, (int) $a->late_minutes)) {
                 $a->late_code = $tier['code'];
@@ -46,10 +53,10 @@ class DeductionService
                 $a->early_leave_code = $tier['code'];
                 $amount += (int) $tier['amount'];
             }
-            // Potongan satu hari tidak melebihi potongan tidak masuk (alpa).
-            if ($rules->absent_amount > 0) {
-                $amount = min($amount, $rules->absent_amount);
-            }
+        }
+        // Potongan satu hari tidak melebihi potongan tidak masuk (alpa).
+        if ($a->status !== AttendanceStatus::Absent && $rules->absent_amount > 0) {
+            $amount = min($amount, $rules->absent_amount);
         }
 
         $a->fill(['deduction_amount' => $amount, 'deduction_rule_set_id' => $rules->id]);

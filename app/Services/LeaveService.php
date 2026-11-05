@@ -10,9 +10,13 @@ use App\Models\Employee;
 use App\Models\LeaveRequest;
 use App\Models\User;
 use App\Notifications\Push\PushNotifier;
+use App\Support\AttachmentFingerprint;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonPeriod;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class LeaveService
@@ -23,59 +27,148 @@ class LeaveService
     ) {}
 
     /**
-     * Pengajuan baru dari pegawai. Ditolak bila terlalu lama ke belakang,
-     * bertumpuk dengan pengajuan lain yang masih berlaku, tidak berisi hari
-     * kerja, atau (untuk cuti) melebihi sisa jatah tahun itu.
+     * Pengajuan baru dari pegawai, sendiri atau bersama rekan ($members, hanya
+     * untuk jenis yang allowsGroup()). Setiap anggota mendapat pengajuan
+     * sendiri (satu group_id) yang disetujui kepala unitnya masing-masing.
+     * Semua aturan dicek untuk setiap anggota; satu saja gagal, tidak ada yang
+     * tersimpan.
+     *
+     * Lampiran yang isinya sama persis dengan lampiran pengajuan lain yang
+     * masih berlaku ditolak; foto yang sekadar mirip ditandai untuk penyetuju.
      *
      * @param  array{type: string, start_date: string, end_date: string, reason: string}  $data
+     * @param  Collection<int, Employee>|null  $members  rekan selain $employee
+     * @return Collection<int, LeaveRequest> pengajuan $employee lebih dulu, lalu rekan
      */
-    public function submit(Employee $employee, array $data, ?string $attachmentPath = null): LeaveRequest
+    public function submit(Employee $employee, array $data, ?UploadedFile $attachment = null, ?Collection $members = null): Collection
     {
         $type = LeaveType::from($data['type']);
         $start = CarbonImmutable::parse($data['start_date']);
         $end = CarbonImmutable::parse($data['end_date']);
+        $members = ($members ?? collect())->reject(fn (Employee $m) => $m->id === $employee->id)->unique('id')->values();
+        if ($members->isNotEmpty() && ! $type->allowsGroup()) {
+            throw ValidationException::withMessages(['member_ids' => "{$type->getLabel()} tidak bisa diajukan bersama rekan; setiap orang mengajukan sendiri."]);
+        }
+
+        $people = collect([$employee])->concat($members);
+        $days = $people->mapWithKeys(fn (Employee $e) => [$e->id => $this->check($e, $type, $start, $end, $e->id !== $employee->id)]);
+        [$hash, $phash, $similar] = $attachment ? $this->fingerprint($employee, $attachment) : [null, null, null];
+
+        $leaves = DB::transaction(function () use ($employee, $people, $days, $type, $start, $end, $data, $attachment, $hash, $phash, $similar) {
+            $path = $attachment?->store("leaves/{$employee->id}", config('attendance.photo_disk'));
+            $group = $people->count() > 1 ? (string) Str::uuid() : null;
+
+            return $people->map(fn (Employee $e) => $e->leaveRequests()->create([
+                'institution_id' => $e->institution_id,
+                'group_id' => $group,
+                'submitted_by' => $employee->id,
+                'type' => $type,
+                'start_date' => $start->toDateString(),
+                'end_date' => $end->toDateString(),
+                'days' => $days[$e->id],
+                'reason' => $data['reason'],
+                'attachment_path' => $path,
+                'attachment_hash' => $hash,
+                'attachment_phash' => $phash,
+                'similar_leave_request_id' => $similar?->id,
+                'status' => LeaveStatus::Pending,
+            ]));
+        });
+
+        $first = $leaves->first();
+        ActivityLog::record($employee->user, 'request', "Mengajukan {$type->getLabel()} {$first->rangeLabel()}"
+            .($members->isNotEmpty() ? ' bersama '.$members->map->name->implode(', ') : ''));
+        foreach ($leaves->skip(1) as $leave) {
+            $this->push->send($leave->employee, "{$type->getLabel()} untuk Anda",
+                "{$employee->name} mengajukan {$type->getLabel()} bersama untuk {$leave->rangeLabel()}. Menunggu persetujuan.",
+                ['type' => 'leave', 'id' => (string) $leave->id]);
+        }
+
+        return $leaves;
+    }
+
+    /**
+     * Aturan pengajuan untuk satu orang; mengembalikan jumlah hari kerjanya.
+     * Pesan untuk rekan diawali namanya supaya pengaju tahu siapa yang bermasalah.
+     */
+    private function check(Employee $e, LeaveType $type, CarbonImmutable $start, CarbonImmutable $end, bool $isMember): int
+    {
+        $fail = fn (string $field, string $message) => throw ValidationException::withMessages([
+            $isMember ? 'member_ids' : $field => $isMember ? "{$e->name}: ".lcfirst($message) : $message,
+        ]);
         $today = CarbonImmutable::now(config('attendance.timezone'))->startOfDay();
         $backdate = config('attendance.leave.max_backdate_days');
 
-        if ($start->lt($today->subDays($backdate))) {
-            throw ValidationException::withMessages(['start_date' => "Tanggal mulai paling lama $backdate hari ke belakang."]);
+        if ($isMember && ! $e->user?->is_active) {
+            $fail('member_ids', 'Akun tidak aktif.');
         }
-        $clash = $employee->leaveRequests()
+        if ($start->lt($today->subDays($backdate))) {
+            $fail('start_date', "Tanggal mulai paling lama $backdate hari ke belakang.");
+        }
+        $clash = $e->leaveRequests()
             ->whereIn('status', [LeaveStatus::Pending, LeaveStatus::Approved])
             ->whereDate('start_date', '<=', $end->toDateString())
             ->whereDate('end_date', '>=', $start->toDateString())
             ->first();
         if ($clash) {
-            throw ValidationException::withMessages(['start_date' => "Bertumpuk dengan pengajuan {$clash->type->getLabel()} "
-                .$this->range($clash).' ('.$clash->status->getLabel().').']);
+            $fail('start_date', "Bertumpuk dengan pengajuan {$clash->type->getLabel()} {$clash->rangeLabel()} ({$clash->status->getLabel()}).");
         }
-        $perYear = $this->workdaysPerYear($employee, $start, $end);
+        $perYear = $this->workdaysPerYear($e, $start, $end);
         $days = array_sum($perYear);
         if ($days === 0) {
-            throw ValidationException::withMessages(['end_date' => 'Rentang tanggal ini tidak berisi hari kerja.']);
+            $fail('end_date', 'Rentang tanggal ini tidak berisi hari kerja.');
         }
         if ($type === LeaveType::Cuti) {
             foreach ($perYear as $year => $n) {
-                $left = $this->quota($employee, $year)['remaining'];
+                $left = $this->quota($e, $year)['remaining'];
                 if ($n > $left) {
-                    throw ValidationException::withMessages(['end_date' => "Sisa cuti tahun $year tinggal $left hari kerja; pengajuan ini $n hari."]);
+                    $fail('end_date', "Sisa cuti tahun $year tinggal $left hari kerja; pengajuan ini $n hari.");
                 }
             }
         }
 
-        $leave = $employee->leaveRequests()->create([
-            'institution_id' => $employee->institution_id,
-            'type' => $type,
-            'start_date' => $start->toDateString(),
-            'end_date' => $end->toDateString(),
-            'days' => $days,
-            'reason' => $data['reason'],
-            'attachment_path' => $attachmentPath,
-            'status' => LeaveStatus::Pending,
-        ]);
-        ActivityLog::record($employee->user, 'request', "Mengajukan {$type->getLabel()} {$this->range($leave)}");
+        return $days;
+    }
 
-        return $leave;
+    /**
+     * Sidik lampiran. File yang sama persis dengan lampiran pengajuan lain yang
+     * menunggu/disetujui ditolak; gambar yang mirip dikembalikan sebagai
+     * $similar untuk ditandai.
+     *
+     * @return array{0: string, 1: ?string, 2: ?LeaveRequest}
+     */
+    private function fingerprint(Employee $employee, UploadedFile $file): array
+    {
+        $bytes = (string) file_get_contents($file->getRealPath());
+        $hash = AttachmentFingerprint::exact($bytes);
+        $active = fn () => LeaveRequest::where('institution_id', $employee->institution_id)
+            ->whereIn('status', [LeaveStatus::Pending, LeaveStatus::Approved]);
+
+        // Bila file itu juga pernah dipakai sendiri (mis. di izin bersama), pesannya untuk pengajuan sendiri.
+        $same = $active()->where('attachment_hash', $hash)
+            ->orderByRaw('employee_id = ? desc', [$employee->id])->latest('id')->first();
+        if ($same) {
+            throw ValidationException::withMessages(['attachment' => $same->employee_id === $employee->id
+                ? "Lampiran ini sudah Anda pakai untuk pengajuan {$same->type->getLabel()} {$same->rangeLabel()}. Unggah dokumen untuk izin ini."
+                : "Lampiran ini sudah dipakai di pengajuan pegawai lain ({$same->type->getLabel()} {$same->rangeLabel()}). "
+                    .'Bila izinnya bersama, cukup satu orang mengajukan dan menambahkan rekan.']);
+        }
+
+        $phash = AttachmentFingerprint::perceptual($bytes);
+        $similar = null;
+        if ($phash) {
+            $best = AttachmentFingerprint::SIMILAR_MAX_DISTANCE + 1;
+            $active()->whereNotNull('attachment_phash')->where('created_at', '>=', now()->subYear())
+                ->select(['id', 'attachment_phash'])->orderByDesc('id')
+                ->each(function (LeaveRequest $other) use ($phash, &$best, &$similar) {
+                    $d = AttachmentFingerprint::distance($phash, $other->attachment_phash);
+                    if ($d < $best) {
+                        [$best, $similar] = [$d, $other];
+                    }
+                });
+        }
+
+        return [$hash, $phash, $similar];
     }
 
     /**
@@ -118,13 +211,6 @@ class LeaveService
         return $days;
     }
 
-    private function range(LeaveRequest $leave): string
-    {
-        return $leave->start_date->eq($leave->end_date)
-            ? $leave->start_date->translatedFormat('d M Y')
-            : $leave->start_date->translatedFormat('d M').' – '.$leave->end_date->translatedFormat('d M Y');
-    }
-
     /**
      * Setujui izin dan tandai hari-hari kerja dalam rentangnya. Hari yang
      * sudah ada absen masuknya tidak ditimpa.
@@ -151,12 +237,13 @@ class LeaveService
                 }
                 $row->fill([
                     'institution_id' => $employee->institution_id,
+                    'leave_request_id' => $leave->id,
                     'status' => $leave->type->attendanceStatus(),
                     'schedule_snapshot' => $schedule->toArray(),
                     'note' => $leave->type->getLabel().': '.str($leave->reason)->limit(150),
                 ])->save();
             }
-            ActivityLog::record($approver, 'review', "Menyetujui {$leave->type->getLabel()} {$employee->name} {$this->range($leave)}");
+            ActivityLog::record($approver, 'review', "Menyetujui {$leave->type->getLabel()} {$employee->name} {$leave->rangeLabel()}");
         });
 
         $this->notify($leave, true);
@@ -170,7 +257,7 @@ class LeaveService
             'approved_at' => now(),
             'review_note' => $note,
         ]);
-        ActivityLog::record($approver, 'review', "Menolak {$leave->type->getLabel()} {$leave->employee->name} {$this->range($leave)}");
+        ActivityLog::record($approver, 'review', "Menolak {$leave->type->getLabel()} {$leave->employee->name} {$leave->rangeLabel()}");
         $this->notify($leave, false);
     }
 

@@ -118,6 +118,22 @@ menyegarkan status setiap menit selama aplikasi terbuka.
 - **Notifikasi pengajuan**: izin, koreksi, dan izin keluar baru dikirim ke kepala unit
   terdekat di atas pegawai (bukan dirinya sendiri), atau ke Admin SDM bila tidak ada.
   Muncul di lonceng panel (perlu `worker` antrean) dan sebagai push ke HP pimpinan.
+- **Potongan izin**: di Aturan Potongan, isian "Izin, sakit, cuti, dan tugas luar" adalah
+  nominal per hari kerja per jenis (0 = tidak dipotong), dibatasi nominal alpa. Baris
+  presensi menyimpan pengajuan asalnya (`attendances.leave_request_id`) karena Izin dan
+  Cuti sama-sama berstatus "izin". Hari yang pegawainya tetap absen masuk tidak dipotong
+  sebagai izin. `GET /leaves` mengirim nominalnya di `meta.leave_deductions`.
+- **Izin bersama**: Izin dan Tugas luar boleh diajukan satu pegawai untuk dirinya dan
+  rekan (`member_ids[]`, maks. 30; cari rekan lewat `GET /colleagues?q=`). Setiap anggota
+  mendapat pengajuan sendiri (`group_id` sama, `submitted_by` = pengaju) yang disetujui
+  kepala unitnya masing-masing; satu anggota gagal validasi berarti tidak ada yang
+  tersimpan. Rekan mendapat push, dan kepala unit menerima satu notifikasi untuk semua
+  anggota di unitnya. Sakit dan cuti selalu pribadi.
+- **Lampiran ganda**: file yang isinya sama persis (SHA-256) dengan lampiran pengajuan
+  lain yang menunggu/disetujui ditolak, kecuali dalam satu izin bersama. Foto yang mirip
+  (dHash; tetap terdeteksi walau dikompres ulang atau diteruskan lewat WhatsApp) tidak
+  ditolak karena surat dari template yang sama juga tampak mirip, tetapi ditandai
+  "Mirip lampiran …" di daftar Izin & Cuti untuk dicek penyetuju.
 - **Catat manual** (Presensi → tombol di atas tabel, Admin SDM saja) untuk pegawai yang
   tidak bisa absen lewat aplikasi. Status dihitung dari jadwal hari itu; catatan ini
   tersimpan di Koreksi Absen sebagai koreksi yang disetujui atas nama admin.

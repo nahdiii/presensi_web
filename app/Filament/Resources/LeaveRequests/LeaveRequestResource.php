@@ -64,11 +64,19 @@ class LeaveRequestResource extends Resource
             });
 
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['employee.user', 'employee.unit', 'approver']))
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['employee.user', 'employee.unit', 'approver', 'submitter.user',
+                'groupMembers.employee.user', 'similarTo.employee.user']))
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('employee.user.name')->label('Pegawai')->searchable()
-                    ->description(fn (LeaveRequest $r) => $r->employee->unit?->name),
+                    ->description(fn (LeaveRequest $r) => collect([
+                        $r->employee->unit?->name,
+                        $r->isSubmittedByOther() ? 'Diajukan oleh '.$r->submitter?->name : null,
+                    ])->filter()->implode(' · ')),
+                TextColumn::make('group_id')->label('Bersama')->placeholder('-')
+                    ->formatStateUsing(fn (LeaveRequest $r) => ($r->groupMembers->count() - 1).' rekan')
+                    ->tooltip(fn (LeaveRequest $r) => $r->groupMembers->where('id', '!=', $r->id)
+                        ->map(fn (LeaveRequest $l) => $l->employee->name.' ('.$l->status->getLabel().')')->implode(', ')),
                 TextColumn::make('type')->label('Jenis')->badge(),
                 TextColumn::make('start_date')->label('Tanggal')
                     ->formatStateUsing(fn (LeaveRequest $r) => $r->start_date->translatedFormat('d M').($r->end_date->ne($r->start_date) ? ' – '.$r->end_date->translatedFormat('d M Y') : ' '.$r->start_date->format('Y'))),
@@ -77,6 +85,10 @@ class LeaveRequestResource extends Resource
                 TextColumn::make('attachment_path')->label('Lampiran')->formatStateUsing(fn () => 'Lihat')
                     ->url(fn (LeaveRequest $r) => $r->attachment_path
                         ? Storage::disk(config('attendance.photo_disk'))->temporaryUrl($r->attachment_path, now()->addMinutes(10)) : null, true)
+                    // Foto yang mirip lampiran pengajuan lain (mis. surat yang sama difoto ulang).
+                    ->icon(fn (LeaveRequest $r) => $r->similarTo ? Heroicon::OutlinedExclamationTriangle : null)->iconColor('danger')
+                    ->description(fn (LeaveRequest $r) => $r->similarTo
+                        ? "Mirip lampiran {$r->similarTo->employee->name} ({$r->similarTo->type->getLabel()} {$r->similarTo->rangeLabel()})" : null)
                     ->placeholder('-'),
                 TextColumn::make('status')->badge(),
                 TextColumn::make('approver.name')->label('Diputuskan oleh')->placeholder('-')

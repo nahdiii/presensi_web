@@ -27,12 +27,33 @@ class ApprovalNotifier
 
     public function leaveSubmitted(LeaveRequest $leave): void
     {
-        $range = $leave->start_date->eq($leave->end_date)
-            ? $leave->start_date->translatedFormat('d M Y')
-            : $leave->start_date->translatedFormat('d M').' – '.$leave->end_date->translatedFormat('d M Y');
-        $this->send($leave->employee, "Pengajuan {$leave->type->getLabel()}",
-            "{$leave->employee->name} · $range".($leave->days ? " ({$leave->days} hari kerja)" : ''),
-            LeaveRequestResource::getUrl(panel: 'admin'), Heroicon::OutlinedDocumentText);
+        $this->leavesSubmitted(collect([$leave]));
+    }
+
+    /**
+     * Pengajuan baru, termasuk izin bersama: anggota yang penyetujunya sama
+     * digabung dalam satu notifikasi supaya kepala unit tidak menerima satu
+     * pesan per anggota.
+     *
+     * @param  Collection<int, LeaveRequest>  $leaves
+     */
+    public function leavesSubmitted(Collection $leaves): void
+    {
+        $first = $leaves->first();
+        $byApprovers = $leaves->groupBy(fn (LeaveRequest $l) => $this->approversFor($l->employee->loadMissing(['user', 'unit']))
+            ->pluck('id')->sort()->implode(','));
+
+        foreach ($byApprovers as $group) {
+            $names = $group->map(fn (LeaveRequest $l) => $l->employee->name);
+            $who = $names->take(3)->implode(', ').($names->count() > 3 ? ' +'.($names->count() - 3) : '');
+            $days = $group->count() === 1 && $first->days ? " ({$first->days} hari kerja)" : '';
+            $by = $first->submitter && $group->doesntContain(fn (LeaveRequest $l) => $l->employee_id === $first->submitted_by)
+                ? ", diajukan oleh {$first->submitter->name}" : '';
+            $this->notify($this->approversFor($group->first()->employee),
+                "Pengajuan {$first->type->getLabel()}".($leaves->count() > 1 ? ' bersama' : ''),
+                "$who · {$first->rangeLabel()}$days$by",
+                LeaveRequestResource::getUrl(panel: 'admin'), Heroicon::OutlinedDocumentText);
+        }
     }
 
     public function correctionSubmitted(AttendanceCorrection $c): void
@@ -68,8 +89,12 @@ class ApprovalNotifier
 
     private function send(Employee $from, string $title, string $body, string $url, Heroicon $icon): void
     {
-        $approvers = $this->approversFor($from->loadMissing(['user', 'unit']));
+        $this->notify($this->approversFor($from->loadMissing(['user', 'unit'])), $title, $body, $url, $icon);
+    }
 
+    /** @param  Collection<int, User>  $approvers */
+    private function notify(Collection $approvers, string $title, string $body, string $url, Heroicon $icon): void
+    {
         Notification::make()->title($title)->body($body)->icon($icon)->iconColor('warning')
             ->actions([Action::make('open')->label('Tinjau')->url($url)->markAsRead()])
             ->sendToDatabase($approvers);

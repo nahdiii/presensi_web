@@ -121,7 +121,7 @@ class AttendanceController extends Controller
         }
 
         $items = $request->user()->employee->attendances()
-            ->with(['checkInOffice', 'checkOutOffice'])
+            ->with(['checkInOffice', 'checkOutOffice', 'leaveRequest'])
             ->whereDate('date', '>=', $from->toDateString())
             ->whereDate('date', '<=', $to->toDateString())
             ->orderByDesc('date')
@@ -147,7 +147,7 @@ class AttendanceController extends Controller
     public function show(Attendance $attendance): AttendanceResource
     {
         Gate::authorize('view', $attendance);
-        $resource = new AttendanceResource($attendance->load(['checkInOffice', 'checkOutOffice']));
+        $resource = new AttendanceResource($attendance->load(['checkInOffice', 'checkOutOffice', 'leaveRequest']));
         $resource->withPhotos = true;
 
         return $resource;

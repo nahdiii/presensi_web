@@ -47,6 +47,8 @@ class AttendanceResource extends JsonResource
             'late_code' => $this->late_code,
             'early_leave_code' => $this->early_leave_code,
             'deduction_amount' => $this->deduction_amount,
+            // Sebab potongan, mis. "TL2 · PSW1", "Alpa", atau "Izin".
+            'deduction_label' => implode(' · ', $this->deductionCodes()) ?: null,
             'check_in' => $punch('check_in'),
             'check_out' => $punch('check_out'),
             'note' => $this->note,

@@ -22,6 +22,15 @@ enum LeaveType: string implements HasLabel
         };
     }
 
+    /**
+     * Boleh diajukan bersama rekan (mis. dinas dengan satu surat tugas).
+     * Sakit dan cuti selalu pribadi.
+     */
+    public function allowsGroup(): bool
+    {
+        return in_array($this, [self::Izin, self::TugasLuar], true);
+    }
+
     /** Status presensi yang ditulis untuk hari-hari selama izin disetujui. */
     public function attendanceStatus(): AttendanceStatus
     {

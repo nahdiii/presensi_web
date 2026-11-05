@@ -55,16 +55,16 @@ class AttendanceResource extends Resource
         return $at ? Carbon::instance($at)->setTimezone($r->checkInOffice?->timezone ?? config('attendance.timezone'))->format('H:i') : null;
     }
 
-    /** Kode TL/PSW hari itu, mis. "TL2 · PSW1". */
+    /** Sebab potongan hari itu, mis. "TL2 · PSW1", "Alpa", atau "Cuti". */
     public static function codes(Attendance $r): ?string
     {
-        return collect([$r->late_code, $r->early_leave_code])->filter()->implode(' · ') ?: null;
+        return implode(' · ', $r->deductionCodes()) ?: null;
     }
 
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['employee.user', 'employee.unit', 'checkInOffice', 'checkOutOffice']))
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['employee.user', 'employee.unit', 'checkInOffice', 'checkOutOffice', 'leaveRequest']))
             ->defaultSort('date', 'desc')
             ->columns([
                 TextColumn::make('date')->label('Tanggal')->date('D, d M Y')->sortable(),

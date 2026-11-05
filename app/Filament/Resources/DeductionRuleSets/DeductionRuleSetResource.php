@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\DeductionRuleSets;
 
+use App\Enums\LeaveType;
 use App\Filament\Concerns\AdminOnly;
 use App\Filament\Resources\DeductionRuleSets\Pages\ManageDeductionRuleSets;
 use App\Models\DeductionRuleSet;
@@ -47,7 +48,10 @@ class DeductionRuleSetResource extends Resource
     {
         $latest = DeductionRuleSet::latest('effective_from')->latest('id')->first();
 
-        return $latest?->only(['late_tiers', 'early_leave_tiers', 'no_checkout_amount', 'absent_amount']) ?? DeductionRuleSet::defaults();
+        $values = $latest?->only(['late_tiers', 'early_leave_tiers', 'no_checkout_amount', 'absent_amount', 'leave_amounts']) ?? DeductionRuleSet::defaults();
+        $values['leave_amounts'] = ($values['leave_amounts'] ?? []) + DeductionRuleSet::defaults()['leave_amounts'];
+
+        return $values;
     }
 
     public static function form(Schema $schema): Schema
@@ -89,8 +93,13 @@ class DeductionRuleSetResource extends Resource
                     ->default(fn () => self::startingValues()['no_checkout_amount']),
                 $rupiah('absent_amount', 'Alpa (tidak masuk tanpa keterangan)')->required()
                     ->default(fn () => self::startingValues()['absent_amount'])
-                    ->helperText('Juga batas atas potongan satu hari (terlambat + pulang cepat).'),
+                    ->helperText('Juga batas atas potongan satu hari (terlambat + pulang cepat, atau izin).'),
             ]),
+            Section::make('Izin, sakit, cuti, dan tugas luar')->columns(4)->columnSpanFull()
+                ->description('Nominal per hari kerja selama pengajuan disetujui. Isi 0 bila jenis itu tidak dipotong. '
+                    .'Hari yang pegawainya tetap absen masuk tidak dihitung sebagai izin.')
+                ->components(collect(LeaveType::cases())->map(fn (LeaveType $t) => $rupiah("leave_amounts.{$t->value}", $t->getLabel())
+                    ->required()->default(fn () => self::startingValues()['leave_amounts'][$t->value] ?? 0))->all()),
         ]);
     }
 

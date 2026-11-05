@@ -110,6 +110,7 @@ class CloseAttendanceDay extends Command
             'employee_id' => $employee->id,
             'date' => $date,
             'status' => $status,
+            'leave_request_id' => $leave !== null && ! $schedule->isDayOff ? $leave->id : null,
             'schedule_snapshot' => $schedule->toArray(),
             'note' => $schedule->isDayOff ? $schedule->reason : null,
         ]);
