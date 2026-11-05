@@ -359,14 +359,14 @@ class CheckInTest extends TestCase
         // Ditolak walaupun di luar kampus: pesannya tentang cutinya, bukan jarak.
         $this->punch($onLeave, 'in', ['latitude' => self::LAT + 0.05])->assertStatus(422)
             ->assertJsonPath('error.code', 'on_leave')
-            ->assertJsonPath('error.message', 'Anda sedang Cuti (27 Okt – 29 Okt 2026) yang sudah disetujui, jadi tidak perlu absen.');
+            ->assertJsonPath('error.message', 'Anda sedang Cuti (27 Okt – 29 Okt 2026) yang sudah disetujui. Bila hari ini Anda masuk kerja, batalkan izin hari ini di beranda lalu absen.');
         $this->assertSame('on_leave', AttendanceAttempt::where('employee_id', $onLeave->id)->sole()->reason->value);
         $this->assertNull(Attendance::where('employee_id', $onLeave->id)->whereNotNull('check_in_at')->first());
 
         Sanctum::actingAs($onLeave->user);
         $this->withHeader('X-Device-UID', $this->deviceUids[$onLeave->id])->getJson('/api/v1/attendance/today')
             ->assertOk()->assertJsonPath('data.next_action', 'on_leave')
-            ->assertJsonPath('data.next_action_message', 'Anda sedang Cuti (27 Okt – 29 Okt 2026) yang sudah disetujui, jadi tidak perlu absen.');
+            ->assertJsonPath('data.next_action_message', 'Anda sedang Cuti (27 Okt – 29 Okt 2026) yang sudah disetujui. Bila hari ini Anda masuk kerja, batalkan izin hari ini di beranda lalu absen.');
 
         // Masih menunggu persetujuan, atau izinnya hari lain: tetap bisa absen.
         $this->punch($pending)->assertCreated();

@@ -24,6 +24,7 @@ class LeaveRequest extends Model
     {
         return [
             'deduction_per_day' => 'integer',
+            'cancelled_dates' => 'array',
             'status' => LeaveStatus::class,
             'start_date' => 'date',
             'end_date' => 'date',
@@ -131,18 +132,28 @@ class LeaveRequest extends Model
         return $this->submitted_by !== null && $this->submitted_by !== $this->employee_id;
     }
 
-    /** Pengajuan yang sudah disetujui dan mencakup tanggal ini. */
+    /**
+     * Pengajuan yang sudah disetujui dan mencakup tanggal ini, kecuali hari
+     * yang dibatalkan karena pegawai masuk kerja.
+     */
     public static function approvedOn(Employee $employee, string $date): ?self
     {
         return self::with('leaveType')->where('employee_id', $employee->id)->where('status', LeaveStatus::Approved)
             ->whereDate('start_date', '<=', $date)->whereDate('end_date', '>=', $date)
+            ->where(fn ($query) => $query->whereNull('cancelled_dates')->orWhereJsonDoesntContain('cancelled_dates', $date))
             ->first();
+    }
+
+    public function isCancelledOn(string $date): bool
+    {
+        return in_array($date, $this->cancelled_dates ?? [], true);
     }
 
     /** Pesan untuk pegawai yang mencoba absen pada hari izinnya. */
     public function onLeaveMessage(): string
     {
-        return "Anda sedang {$this->typeLabel()} ({$this->rangeLabel()}) yang sudah disetujui, jadi tidak perlu absen.";
+        return "Anda sedang {$this->typeLabel()} ({$this->rangeLabel()}) yang sudah disetujui. "
+            .'Bila hari ini Anda masuk kerja, batalkan izin hari ini di beranda lalu absen.';
     }
 
     /** "3 Nov 2026" atau "3 Nov – 4 Nov 2026". */

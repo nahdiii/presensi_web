@@ -4,7 +4,6 @@ namespace App\Console\Commands;
 
 use App\Enums\AttendanceStatus;
 use App\Enums\AttendanceType;
-use App\Enums\LeaveStatus;
 use App\Models\Attendance;
 use App\Models\CalendarEvent;
 use App\Models\Employee;
@@ -90,10 +89,7 @@ class CloseAttendanceDay extends Command
             return null;
         }
 
-        $leave = LeaveRequest::where('employee_id', $employee->id)
-            ->where('status', LeaveStatus::Approved)
-            ->whereDate('start_date', '<=', $date)->whereDate('end_date', '>=', $date)
-            ->first();
+        $leave = LeaveRequest::approvedOn($employee, $date);
 
         $status = match (true) {
             $leave !== null && ! $schedule->isDayOff => $leave->leaveType->attendanceStatus(),

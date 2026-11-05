@@ -9,8 +9,10 @@ use App\Models\LeaveRequest;
 use App\Services\LeaveService;
 use App\Support\Rupiah;
 use BackedEnum;
+use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Infolists\Components\ImageEntry;
 use Filament\Infolists\Components\RepeatableEntry;
@@ -78,6 +80,7 @@ class LeaveRequestResource extends Resource
                     ->extraModalFooterActions(fn () => [
                         $review('approveFromDetail', 'Setujui', 'success', true)->cancelParentActions(),
                         $review('rejectFromDetail', 'Tolak', 'danger', false)->cancelParentActions(),
+                        self::cancelDayAction()->cancelParentActions(),
                     ]),
                 $review('approve', 'Setujui', 'success', true),
                 $review('reject', 'Tolak', 'danger', false),
@@ -94,6 +97,25 @@ class LeaveRequestResource extends Resource
                 $svc = app(LeaveService::class);
                 $approve ? $svc->approve($r, auth()->user(), $data['note'] ?? null) : $svc->reject($r, auth()->user(), $data['note']);
                 Notification::make()->title($approve ? 'Pengajuan disetujui' : 'Pengajuan ditolak')->success()->send();
+            });
+    }
+
+    /** Admin SDM membatalkan satu hari izin yang sudah disetujui (pegawai ternyata masuk kerja). */
+    private static function cancelDayAction(): Action
+    {
+        return Action::make('cancelDay')->label('Batalkan satu hari')->color('gray')->icon(Heroicon::OutlinedArrowUturnLeft)
+            ->visible(fn (LeaveRequest $r) => $r->status === LeaveStatus::Approved && auth()->user()->isAdmin())
+            ->modalDescription('Pegawai ternyata masuk kerja pada hari itu. Hari itu dikeluarkan dari izin, jatah dan potongannya kembali. '
+                .'Hari ini/ke depan: pegawai bisa absen seperti biasa. Hari yang sudah lewat tanpa absen menjadi alpa; catat presensinya lewat "Catat manual".')
+            ->schema([
+                DatePicker::make('date')->label('Tanggal')->required()->native(false)
+                    ->minDate(fn (LeaveRequest $record) => $record->start_date)->maxDate(fn (LeaveRequest $record) => $record->end_date)
+                    ->disabledDates(fn (LeaveRequest $record) => $record->cancelled_dates ?? []),
+                Textarea::make('note')->label('Alasan')->rows(2)->maxLength(500),
+            ])
+            ->action(function (LeaveRequest $r, array $data) {
+                app(LeaveService::class)->cancelDay($r, Carbon::parse($data['date'])->toDateString(), auth()->user(), $data['note'] ?? null);
+                Notification::make()->title('Izin hari itu dibatalkan')->success()->send();
             });
     }
 
@@ -161,6 +183,10 @@ class LeaveRequestResource extends Resource
                 TextEntry::make('created_at')->label('Diajukan')
                     ->state(fn (LeaveRequest $r) => $r->created_at->setTimezone($tz)->translatedFormat('d M Y H:i'))
                     ->helperText(fn (LeaveRequest $r) => $r->isSubmittedByOther() ? 'oleh '.$r->submitter?->name : null),
+                TextEntry::make('cancelled_dates')->label('Hari dibatalkan')->badge()->color('gray')
+                    ->state(fn (LeaveRequest $r) => collect($r->cancelled_dates ?? [])->map(fn (string $d) => Carbon::parse($d)->translatedFormat('d M Y'))->all())
+                    ->helperText('Pegawai masuk kerja; tidak dihitung sebagai izin.')
+                    ->visible(fn (LeaveRequest $r) => ! empty($r->cancelled_dates)),
                 TextEntry::make('reason')->label('Alasan')->columnSpan(2)->prose(),
             ]),
             Section::make('Lampiran')->columns(2)

@@ -56,6 +56,14 @@ class ApprovalNotifier
         }
     }
 
+    /** Pegawai membatalkan izinnya untuk hari ini karena masuk kerja. */
+    public function leaveDayCancelled(LeaveRequest $leave, string $dateLabel): void
+    {
+        $this->send($leave->employee, "{$leave->typeLabel()} dibatalkan",
+            "{$leave->employee->name} masuk kerja pada $dateLabel; izin hari itu dibatalkan",
+            LeaveRequestResource::getUrl(panel: 'admin'), Heroicon::OutlinedArrowUturnLeft);
+    }
+
     public function correctionSubmitted(AttendanceCorrection $c): void
     {
         $this->send($c->employee, 'Koreksi lupa absen',

@@ -18,6 +18,8 @@ class LeaveRequestResource extends JsonResource
             'start_date' => $this->start_date->toDateString(),
             'end_date' => $this->end_date->toDateString(),
             'days' => $this->days,
+            // Hari yang dibatalkan karena pegawai masuk kerja (Y-m-d).
+            'cancelled_dates' => $this->cancelled_dates ?? [],
             'reason' => $this->reason,
             'has_attachment' => $this->attachment_path !== null,
             'attachment_url' => $this->attachmentUrl(),

@@ -237,6 +237,110 @@ class LeaveGroupTest extends TestCase
             ->assertOk()->assertJsonPath('data.items.0.deduction_label', 'Izin')->assertJsonPath('data.items.0.deduction_amount', 25000);
     }
 
+    // ---------- Batalkan izin hari ini ----------
+
+    public function test_employee_cancels_todays_leave_and_checks_in(): void
+    {
+        $this->amounts(['cuti' => 25000]);
+        $kabiro = $this->makeEmployee();
+        $this->unit->update(['head_employee_id' => $kabiro->id]);
+        $e = $this->makeEmployee();
+        $admin = User::create(['institution_id' => $this->inst->id, 'name' => 'Admin', 'email' => 'a@kampus.test', 'password' => 'x']);
+        $this->at('2026-10-27 06:00');
+        $leave = LeaveRequest::create(['institution_id' => $this->inst->id, 'employee_id' => $e->id, 'type' => 'cuti', 'days' => 3,
+            'start_date' => '2026-10-27', 'end_date' => '2026-10-29', 'reason' => 'Keluarga', 'status' => LeaveStatus::Pending]);
+        app(LeaveService::class)->approve($leave, $admin);
+        $this->assertSame(3, app(LeaveService::class)->quota($e, 2026)['used']);
+
+        $this->at('2026-10-28 07:00');
+        Sanctum::actingAs($e->user);
+        $api = fn () => $this->withHeader('X-Device-UID', $this->deviceUids[$e->id]);
+        $api()->getJson('/api/v1/attendance/today')->assertOk()
+            ->assertJsonPath('data.next_action', 'on_leave')
+            ->assertJsonPath('data.leave.id', $leave->id)
+            ->assertJsonPath('data.leave.type_label', 'Cuti');
+
+        $api()->postJson("/api/v1/leaves/{$leave->id}/cancel-today")->assertOk()
+            ->assertJsonPath('data.cancelled_dates', ['2026-10-28'])
+            ->assertJsonPath('data.days', 2)
+            ->assertJsonPath('data.status', 'approved');
+
+        // Hari ini bukan izin lagi; hari lain tetap.
+        $this->assertSame(0, Attendance::where('employee_id', $e->id)->whereDate('date', '2026-10-28')->count());
+        $this->assertSame(25000, $this->row($e, '2026-10-27')->deduction_amount);
+        $this->assertSame(25000, $this->row($e, '2026-10-29')->deduction_amount);
+        $this->assertSame(2, app(LeaveService::class)->quota($e, 2026)['used']); // Jatah kembali satu hari.
+        $this->assertSame(['amount' => 50000, 'final' => true], $leave->fresh()->load('attendances')->deductionSummary());
+        $this->assertStringContainsString('masuk kerja pada 28 Okt 2026', $kabiro->user->notifications()->first()->data['body']);
+
+        $api()->getJson('/api/v1/attendance/today')->assertJsonPath('data.next_action', 'check_in')->assertJsonPath('data.leave', null);
+        $this->at('2026-10-28 07:20');
+        $this->punch($e)->assertCreated();
+
+        // Tidak bisa dibatalkan dua kali.
+        $api()->postJson("/api/v1/leaves/{$leave->id}/cancel-today")->assertStatus(422)
+            ->assertJsonPath('error.message', 'Hari itu sudah dibatalkan.');
+    }
+
+    public function test_cancel_today_rules(): void
+    {
+        $e = $this->makeEmployee();
+        $other = $this->makeEmployee();
+        $admin = User::create(['institution_id' => $this->inst->id, 'name' => 'Admin', 'email' => 'a@kampus.test', 'password' => 'x']);
+        $pending = $this->leave($e, 'izin');
+        $tomorrow = $this->leave($e, 'izin', '2026-10-29');
+        app(LeaveService::class)->approve($tomorrow, $admin);
+        $notMine = $this->leave($other, 'izin');
+        Sanctum::actingAs($e->user);
+        $post = fn (LeaveRequest $l) => $this->withHeader('X-Device-UID', $this->deviceUids[$e->id])
+            ->postJson("/api/v1/leaves/{$l->id}/cancel-today");
+
+        $post($pending)->assertStatus(422)->assertJsonPath('error.message', 'Hanya izin yang sudah disetujui yang bisa dibatalkan per hari.');
+        $post($tomorrow)->assertStatus(422)->assertJsonPath('error.message', 'Tanggal itu tidak termasuk dalam izin ini.');
+        $post($notMine)->assertNotFound();
+
+        // Membatalkan hari ini lalu tidak absen: tutup hari mencatat alpa.
+        $today = $this->leave($other, 'sakit', '2026-10-28');
+        $today->update(['employee_id' => $e->id]);
+        app(LeaveService::class)->approve($today->fresh(), $admin);
+        $post($today)->assertOk();
+        $this->at('2026-10-28 23:50');
+        $this->artisan('attendance:close-day')->assertSuccessful();
+        $this->assertSame(AttendanceStatus::Absent, $this->row($e)->status);
+    }
+
+    public function test_admin_cancels_a_past_leave_day_from_detail(): void
+    {
+        $e = $this->makeEmployee();
+        $admin = User::create(['institution_id' => $this->inst->id, 'name' => 'Admin', 'email' => 'a@kampus.test', 'password' => 'x']);
+        $admin->assignRole(User::ROLE_ADMIN);
+        $this->at('2026-10-27 06:00');
+        $leave = $this->leave($e, 'izin', '2026-10-27');
+        $leave->update(['end_date' => '2026-10-28', 'days' => 2]);
+        app(LeaveService::class)->approve($leave->fresh(), $admin);
+
+        $this->at('2026-10-28 09:00');
+        $this->actingAs($admin);
+        Livewire::test(ListLeaveRequests::class)
+            ->filterTable('status', LeaveStatus::Approved->value)
+            ->mountTableAction(['view', 'cancelDay'], $leave)
+            ->setActionData(['date' => '2026-10-27', 'note' => 'Hadir rapat'])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $leave->refresh();
+        $this->assertSame(['2026-10-27'], $leave->cancelled_dates);
+        $this->assertSame(1, $leave->days);
+        $past = $this->row($e, '2026-10-27');
+        $this->assertSame(AttendanceStatus::Absent, $past->status); // Sudah lewat: catat manual bila ia hadir.
+        $this->assertNull($past->leave_request_id);
+        $this->assertSame(AttendanceStatus::Leave, $this->row($e)->status);
+        $this->assertSame('Izin 27 Okt 2026 dibatalkan', collect($this->push->sent)->last()['title']);
+
+        Livewire::test(ListLeaveRequests::class)->filterTable('status', LeaveStatus::Approved->value)
+            ->mountTableAction('view', $leave)->assertMountedActionModalSee(['Hari dibatalkan', '27 Okt 2026']);
+    }
+
     // ---------- Izin bersama ----------
 
     public function test_group_leave_creates_one_request_per_member_with_their_own_approver(): void

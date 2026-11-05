@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Enums\AttendanceStatus;
-use App\Enums\LeaveStatus;
 use App\Enums\RejectReason;
 use App\Exceptions\AttendanceRejected;
 use App\Models\CalendarEvent;
@@ -192,10 +191,7 @@ class TeachingSessionService
         if ($holiday = $this->holiday($employee, $date)) {
             return [AttendanceStatus::Holiday, $holiday->name];
         }
-        $leave = LeaveRequest::where('employee_id', $employee->id)
-            ->where('status', LeaveStatus::Approved)
-            ->whereDate('start_date', '<=', $date)->whereDate('end_date', '>=', $date)
-            ->first();
+        $leave = LeaveRequest::approvedOn($employee, $date);
 
         return $leave ? [$leave->leaveType->attendanceStatus(), $leave->typeLabel()] : [null, null];
     }

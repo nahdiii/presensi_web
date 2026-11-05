@@ -53,6 +53,12 @@ class AttendanceController extends Controller
             'attendance' => $a ? new AttendanceResource($a) : null,
             'next_action' => $t['action'],
             'next_action_message' => $t['message'],
+            // Izin/cuti yang sedang berjalan hari ini; pegawai bisa membatalkannya bila ternyata masuk kerja.
+            'leave' => $t['leave'] ? [
+                'id' => $t['leave']->id,
+                'type_label' => $t['leave']->typeLabel(),
+                'range' => $t['leave']->rangeLabel(),
+            ] : null,
             // Fase 2: izin keluar hanya untuk presensi tetap yang sedang di kampus.
             'can_exit' => $t['action'] === 'check_out' && $employee->attendance_type->effective() === AttendanceType::Fixed,
             'exit_permit' => ($permit = app(ExitPermitService::class)->active($employee)) ? new ExitPermitResource($permit) : null,

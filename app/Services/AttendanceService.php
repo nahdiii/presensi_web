@@ -201,7 +201,7 @@ class AttendanceService
             default => $this->nextAction($attendance, $schedule, $date, $tz, $now),
         };
 
-        return compact('date', 'now', 'tz', 'schedule', 'attendance', 'action', 'message');
+        return compact('date', 'now', 'tz', 'schedule', 'attendance', 'action', 'message', 'leave');
     }
 
     /**

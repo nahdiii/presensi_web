@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\AttendanceStatus;
 use App\Enums\LeaveStatus;
 use App\Models\ActivityLog;
 use App\Models\Attendance;
@@ -205,9 +206,11 @@ class LeaveService
             ->whereDate('end_date', '>=', "$year-01-01")
             ->get();
         foreach ($leaves as $leave) {
+            // days sudah dikurangi hari yang dibatalkan; untuk rentang lintas tahun dihitung ulang.
             $n = $leave->days !== null && $leave->start_date->year === $year && $leave->end_date->year === $year
                 ? $leave->days
-                : ($this->workdaysPerYear($employee, $leave->start_date->toImmutable(), $leave->end_date->toImmutable())[$year] ?? 0);
+                : max(0, ($this->workdaysPerYear($employee, $leave->start_date->toImmutable(), $leave->end_date->toImmutable())[$year] ?? 0)
+                    - collect($leave->cancelled_dates ?? [])->filter(fn (string $d) => str_starts_with($d, "$year-"))->count());
             $leave->status === LeaveStatus::Approved ? $used += $n : $pending += $n;
         }
 
@@ -270,6 +273,63 @@ class LeaveService
         });
 
         $this->notify($leave, true);
+    }
+
+    /**
+     * Batalkan satu hari dari izin yang sudah disetujui karena pegawai ternyata
+     * masuk kerja. Pengajuan tetap berlaku untuk hari lain; jumlah hari kerja
+     * berkurang satu sehingga jatah dan potongan hari itu kembali. Baris izin
+     * hari itu dihapus (hari ini/ke depan) supaya pegawai bisa absen, atau
+     * menjadi alpa bila tanggalnya sudah lewat dan tidak ada absen.
+     *
+     * Pegawai hanya boleh membatalkan hari ini (dicek di controller); Admin SDM
+     * boleh hari mana pun dalam rentang izin.
+     */
+    public function cancelDay(LeaveRequest $leave, string $date, User $by, ?string $note = null): void
+    {
+        $employee = $leave->employee;
+        $fail = fn (string $message) => throw ValidationException::withMessages(['date' => $message]);
+        if ($leave->status !== LeaveStatus::Approved) {
+            $fail('Hanya izin yang sudah disetujui yang bisa dibatalkan per hari.');
+        }
+        if ($date < $leave->start_date->toDateString() || $date > $leave->end_date->toDateString()) {
+            $fail('Tanggal itu tidak termasuk dalam izin ini.');
+        }
+        if ($leave->isCancelledOn($date)) {
+            $fail('Hari itu sudah dibatalkan.');
+        }
+        $schedule = $this->shifts->resolve($employee, $date);
+        if ($schedule->isDayOff) {
+            $fail('Tanggal itu bukan hari kerja.');
+        }
+        $label = CarbonImmutable::parse($date)->translatedFormat('d M Y');
+        $byEmployee = $by->id === $employee->user_id;
+
+        DB::transaction(function () use ($leave, $date, $by, $note, $employee, $schedule, $label, $byEmployee) {
+            $leave->update([
+                'cancelled_dates' => collect($leave->cancelled_dates ?? [])->push($date)->sort()->values()->all(),
+                'days' => $leave->days !== null ? max(0, $leave->days - 1) : null,
+            ]);
+            $row = Attendance::where('employee_id', $employee->id)->whereDate('date', $date)
+                ->where('leave_request_id', $leave->id)->whereNull('check_in_at')->first();
+            $today = CarbonImmutable::now(config('attendance.timezone'))->toDateString();
+            if ($row && $date >= $today) {
+                $row->delete(); // Pegawai absen seperti biasa; tutup hari menandai alpa bila tidak.
+            } elseif ($row) {
+                $row->update(['leave_request_id' => null, 'status' => AttendanceStatus::Absent,
+                    'schedule_snapshot' => $schedule->toArray(), 'note' => "{$leave->typeLabel()} dibatalkan"]);
+            }
+            ActivityLog::record($by, $byEmployee ? 'request' : 'review',
+                "Membatalkan {$leave->typeLabel()} {$employee->name} untuk $label".($note ? ": $note" : ''));
+        });
+
+        if ($byEmployee) {
+            app(ApprovalNotifier::class)->leaveDayCancelled($leave, $label);
+        } else {
+            $this->push->send($employee, "{$leave->typeLabel()} $label dibatalkan",
+                "Admin SDM membatalkan izin Anda untuk $label".($note ? ": $note" : '').'. Silakan absen seperti biasa.',
+                ['type' => 'leave', 'id' => (string) $leave->id]);
+        }
     }
 
     public function reject(LeaveRequest $leave, User $approver, ?string $note = null): void

@@ -27,6 +27,7 @@ Route::prefix('v1')->group(function () {
         Route::get('leaves', [LeaveController::class, 'index']);
         Route::post('leaves', [LeaveController::class, 'store']);
         Route::get('colleagues', [LeaveController::class, 'colleagues']);
+        Route::post('leaves/{leave}/cancel-today', [LeaveController::class, 'cancelToday'])->whereNumber('leave');
 
         // Fase 2
         Route::get('presence-checks/pending', [PresenceController::class, 'pending']);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\LeaveRequestResource;
 use App\Models\Employee;
+use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Services\ApprovalNotifier;
 use App\Services\LeaveService;
@@ -75,6 +76,22 @@ class LeaveController extends Controller
         app(ApprovalNotifier::class)->leavesSubmitted($leaves);
 
         return new LeaveRequestResource($leaves->first()->load(['submitter.user', 'groupMembers.employee.user', 'groupMembers.employee.unit']));
+    }
+
+    /**
+     * Batalkan izin/cuti yang sudah disetujui untuk hari ini karena pegawai
+     * masuk kerja; setelahnya pegawai bisa absen seperti biasa. Hanya hari ini
+     * dan hanya izin milik sendiri; hari lain tetap izin.
+     */
+    public function cancelToday(Request $request, LeaveRequest $leave): LeaveRequestResource
+    {
+        $employee = $request->user()->employee;
+        abort_unless($leave->employee_id === $employee->id, 404);
+        $tz = $employee->offices->first()?->timezone ?? config('attendance.timezone');
+
+        app(LeaveService::class)->cancelDay($leave, now($tz)->toDateString(), $request->user());
+
+        return new LeaveRequestResource($leave->fresh(['submitter.user', 'groupMembers.employee.user', 'groupMembers.employee.unit', 'attendances']));
     }
 
     /** Cari rekan untuk izin bersama: nama atau NIP, paling sedikit 2 huruf. */
