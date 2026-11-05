@@ -194,7 +194,7 @@ class TeachingSessionService
             ->whereDate('start_date', '<=', $date)->whereDate('end_date', '>=', $date)
             ->first();
 
-        return $leave ? [$leave->type->attendanceStatus(), $leave->type->getLabel()] : [null, null];
+        return $leave ? [$leave->leaveType->attendanceStatus(), $leave->typeLabel()] : [null, null];
     }
 
     private function holiday(Employee $employee, string $date): ?CalendarEvent

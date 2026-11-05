@@ -119,11 +119,18 @@ menyegarkan status setiap menit selama aplikasi terbuka.
 - **Notifikasi pengajuan**: izin, koreksi, dan izin keluar baru dikirim ke kepala unit
   terdekat di atas pegawai (bukan dirinya sendiri), atau ke Admin SDM bila tidak ada.
   Muncul di lonceng panel (perlu `worker` antrean) dan sebagai push ke HP pimpinan.
-- **Potongan izin**: di Aturan Potongan, isian "Izin, sakit, cuti, dan tugas luar" adalah
-  nominal per hari kerja per jenis (0 = tidak dipotong), dibatasi nominal alpa. Baris
-  presensi menyimpan pengajuan asalnya (`attendances.leave_request_id`) karena Izin dan
-  Cuti sama-sama berstatus "izin". Hari yang pegawainya tetap absen masuk tidak dipotong
-  sebagai izin. `GET /leaves` mengirim nominalnya di `meta.leave_deductions`.
+- **Jenis Izin** (Pengaturan → Jenis Izin, master data): nama, kode, dicatat sebagai
+  izin/sakit/tugas luar, **potongan per hari kerja**, jatah per tahun, boleh bersama rekan,
+  wajib lampiran, aktif. Bawaannya Izin, Sakit, Cuti, Tugas luar (dibuat otomatis untuk
+  institusi baru). Jatah cuti di form Pegawai menggantikan jatah jenis `cuti`. Jenis yang
+  sudah dipakai tidak bisa dihapus, hanya dinonaktifkan. `GET /leaves` mengirim jenis yang
+  aktif di `meta.leave_types`.
+- **Potongan izin dibekukan saat diajukan**: potongan per hari jenisnya disalin ke
+  `leave_requests.deduction_per_day`, lalu dipakai baris presensi
+  (`attendances.leave_request_id`) setiap hari izin, termasuk saat dihitung ulang. Mengubah
+  potongan di Jenis Izin hanya berlaku untuk pengajuan baru. Potongan izin tidak bergantung
+  pada Aturan Potongan dan tidak dibatasi nominal alpa. Hari yang pegawainya tetap absen
+  masuk tidak dipotong sebagai izin.
 - **Izin bersama**: Izin dan Tugas luar boleh diajukan satu pegawai untuk dirinya dan
   rekan (`member_ids[]`, maks. 30; cari rekan lewat `GET /colleagues?q=`). Setiap anggota
   mendapat pengajuan sendiri (`group_id` sama, `submitted_by` = pengaju) yang disetujui

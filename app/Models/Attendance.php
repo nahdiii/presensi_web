@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\AttendanceStatus;
-use App\Enums\LeaveType;
 use App\Models\Concerns\BelongsToInstitution;
 use App\Services\DeductionService;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
@@ -78,20 +77,15 @@ class Attendance extends Model
         return $this->belongsTo(LeaveRequest::class);
     }
 
-    /**
-     * Jenis ketidakhadiran untuk baris izin/sakit/tugas luar. Baris lama tanpa
-     * pengajuan memakai jenis yang paling dekat dengan statusnya.
-     */
-    public function leaveType(): ?LeaveType
+    public function isLeaveDay(): bool
     {
-        return match ($this->status) {
-            AttendanceStatus::Leave, AttendanceStatus::Sick, AttendanceStatus::Duty => $this->leaveRequest?->type ?? match ($this->status) {
-                AttendanceStatus::Sick => LeaveType::Sakit,
-                AttendanceStatus::Duty => LeaveType::TugasLuar,
-                default => LeaveType::Izin,
-            },
-            default => null,
-        };
+        return in_array($this->status, [AttendanceStatus::Leave, AttendanceStatus::Sick, AttendanceStatus::Duty], true);
+    }
+
+    /** Nama jenis izin untuk baris izin/sakit/tugas luar, mis. "Cuti melahirkan". */
+    public function leaveLabel(): ?string
+    {
+        return $this->isLeaveDay() ? ($this->leaveRequest?->typeLabel() ?? $this->status->getLabel()) : null;
     }
 
     /**
@@ -109,7 +103,7 @@ class Attendance extends Model
             $this->late_code,
             $this->early_leave_code,
             $this->status === AttendanceStatus::Absent ? 'Alpa' : null,
-            $this->leaveType()?->getLabel(),
+            $this->leaveLabel(),
         ]));
     }
 }

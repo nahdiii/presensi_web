@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use App\Enums\LeaveStatus;
-use App\Enums\LeaveType;
 use App\Models\Concerns\BelongsToInstitution;
 use App\Services\LeaveService;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
@@ -24,12 +23,42 @@ class LeaveRequest extends Model
     protected function casts(): array
     {
         return [
-            'type' => LeaveType::class,
+            'deduction_per_day' => 'integer',
             'status' => LeaveStatus::class,
             'start_date' => 'date',
             'end_date' => 'date',
             'approved_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (LeaveRequest $l) {
+            // Kolom type menyimpan kode jenis (mis. "cuti") untuk API dan data lama.
+            if (! $l->leave_type_id && $l->type) {
+                $l->leave_type_id = LeaveType::findCode($l->institution_id ?? $l->employee->institution_id, $l->type)?->id;
+            }
+            if ($l->isDirty('leave_type_id') && $l->leaveType) {
+                $l->type = $l->leaveType->code;
+            }
+        });
+        // Potongan per hari disalin saat diajukan; perubahan master tidak mengubahnya.
+        static::creating(function (LeaveRequest $l) {
+            if (! array_key_exists('deduction_per_day', $l->getAttributes())) {
+                $l->deduction_per_day = $l->leaveType?->deduction_per_day ?? 0;
+            }
+        });
+    }
+
+    public function leaveType(): BelongsTo
+    {
+        return $this->belongsTo(LeaveType::class);
+    }
+
+    /** Nama jenis, mis. "Cuti melahirkan". */
+    public function typeLabel(): string
+    {
+        return $this->leaveType?->name ?? (string) $this->type;
     }
 
     public function employee(): BelongsTo
@@ -69,7 +98,7 @@ class LeaveRequest extends Model
     /**
      * Potongan pengajuan ini. Setelah disetujui: jumlah potongan yang benar-benar
      * tercatat di presensi (final). Selama menunggu: perkiraan hari kerja ×
-     * nominal jenisnya pada aturan yang berlaku di tanggal mulai. Ditolak: 0.
+     * potongan per hari yang disalin saat diajukan. Ditolak: 0.
      *
      * @return array{amount: int, final: bool}
      */
@@ -79,8 +108,7 @@ class LeaveRequest extends Model
             LeaveStatus::Approved => ['amount' => (int) $this->attendances->sum('deduction_amount'), 'final' => true],
             LeaveStatus::Rejected => ['amount' => 0, 'final' => true],
             default => ['amount' => ($this->days ?? app(LeaveService::class)->workdays(
-                $this->employee, $this->start_date->toImmutable(), $this->end_date->toImmutable()))
-                * (DeductionRuleSet::forDate($this->institution_id, $this->start_date->toDateString())?->leaveAmount($this->type) ?? 0),
+                $this->employee, $this->start_date->toImmutable(), $this->end_date->toImmutable())) * $this->deduction_per_day,
                 'final' => false],
         };
     }

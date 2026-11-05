@@ -4,15 +4,15 @@ namespace Tests\Feature;
 
 use App\Enums\AttendanceStatus;
 use App\Enums\LeaveStatus;
-use App\Enums\LeaveType;
 use App\Enums\UnitType;
-use App\Filament\Resources\DeductionRuleSets\Pages\ManageDeductionRuleSets;
 use App\Filament\Resources\LeaveRequests\Pages\ListLeaveRequests;
+use App\Filament\Resources\LeaveTypes\Pages\ManageLeaveTypes;
 use App\Jobs\ProcessAttendancePhoto;
 use App\Models\Attendance;
 use App\Models\DeductionRuleSet;
 use App\Models\Employee;
 use App\Models\LeaveRequest;
+use App\Models\LeaveType;
 use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\Push\PushNotifier;
@@ -55,10 +55,12 @@ class LeaveGroupTest extends TestCase
         $this->at('2026-10-28 09:00');
     }
 
-    private function rules(array $leaveAmounts): DeductionRuleSet
+    /** Potongan per hari di master Jenis Izin, mis. ['izin' => 25000]. */
+    private function amounts(array $perCode): void
     {
-        return DeductionRuleSet::create(['leave_amounts' => $leaveAmounts + DeductionRuleSet::defaults()['leave_amounts']]
-            + DeductionRuleSet::defaults() + ['institution_id' => $this->inst->id, 'effective_from' => '2000-01-01']);
+        foreach ($perCode as $code => $amount) {
+            LeaveType::findCode($this->inst->id, $code)->update(['deduction_per_day' => $amount]);
+        }
     }
 
     private function submit(Employee $e, array $data)
@@ -70,7 +72,7 @@ class LeaveGroupTest extends TestCase
                 'start_date' => '2026-11-02', 'end_date' => '2026-11-03'], ['Accept' => 'application/json']);
     }
 
-    private function leave(Employee $e, LeaveType $type, string $date = '2026-10-28'): LeaveRequest
+    private function leave(Employee $e, string $type, string $date = '2026-10-28'): LeaveRequest
     {
         return LeaveRequest::create([
             'institution_id' => $this->inst->id, 'employee_id' => $e->id, 'type' => $type,
@@ -106,7 +108,7 @@ class LeaveGroupTest extends TestCase
 
     public function test_each_leave_type_has_its_own_daily_deduction(): void
     {
-        $this->rules(['izin' => 25000, 'sakit' => 10000, 'cuti' => 0]);
+        $this->amounts(['izin' => 25000, 'sakit' => 10000, 'cuti' => 0]);
         $izin = $this->makeEmployee();
         $cuti = $this->makeEmployee();
         $sakit = $this->makeEmployee();
@@ -114,8 +116,8 @@ class LeaveGroupTest extends TestCase
         $admin = User::create(['institution_id' => $this->inst->id, 'name' => 'Admin', 'email' => 'a@kampus.test', 'password' => 'x']);
 
         // Izin dan Cuti sama-sama berstatus "izin" di presensi, tetapi potongannya beda.
-        $svc->approve($this->leave($izin, LeaveType::Izin), $admin);
-        $svc->approve($this->leave($cuti, LeaveType::Cuti), $admin);
+        $svc->approve($this->leave($izin, 'izin'), $admin);
+        $svc->approve($this->leave($cuti, 'cuti'), $admin);
         $this->assertSame(AttendanceStatus::Leave, $this->row($cuti)->status);
         $this->assertSame(25000, $this->row($izin)->deduction_amount);
         $this->assertSame(['Izin'], $this->row($izin)->deductionCodes());
@@ -123,7 +125,7 @@ class LeaveGroupTest extends TestCase
         $this->assertSame([], $this->row($cuti)->deductionCodes());
 
         // Disetujui sebelum hari H: baris dibuat saat tutup hari, tetap memakai jenisnya.
-        $leave = $this->leave($sakit, LeaveType::Sakit, '2026-10-29');
+        $leave = $this->leave($sakit, 'sakit', '2026-10-29');
         $svc->approve($leave, $admin);
         $this->at('2026-10-29 23:50');
         $this->artisan('attendance:close-day')->assertSuccessful();
@@ -131,39 +133,96 @@ class LeaveGroupTest extends TestCase
         $this->assertSame(10000, $this->row($sakit, '2026-10-29')->deduction_amount);
     }
 
-    public function test_leave_deduction_is_capped_and_follows_new_rules(): void
+    public function test_deduction_is_frozen_when_submitted_and_master_changes_only_affect_new_requests(): void
     {
-        $this->rules(['izin' => 80000]); // Lebih besar dari alpa Rp50.000.
-        $e = $this->makeEmployee();
+        $this->amounts(['izin' => 80000]); // Tidak dibatasi potongan alpa (Rp50.000).
+        $old = $this->makeEmployee();
+        $pending = $this->makeEmployee();
         $admin = User::create(['institution_id' => $this->inst->id, 'name' => 'Admin', 'email' => 'a@kampus.test', 'password' => 'x']);
-        app(LeaveService::class)->approve($this->leave($e, LeaveType::Izin), $admin);
-        $this->assertSame(50000, $this->row($e)->deduction_amount);
+        $approved = $this->leave($old, 'izin');
+        $waiting = $this->leave($pending, 'izin', '2026-10-30');
+        $this->assertSame(80000, $approved->deduction_per_day);
+        app(LeaveService::class)->approve($approved, $admin);
+        $this->assertSame(80000, $this->row($old)->deduction_amount);
 
-        DeductionRuleSet::create(['leave_amounts' => ['izin' => 15000]] + DeductionRuleSet::defaults()
-            + ['institution_id' => $this->inst->id, 'effective_from' => '2026-10-01']);
+        // Admin menurunkan potongan Izin di master.
+        $this->amounts(['izin' => 15000]);
         app(RecalculationService::class)->run($this->inst->id, '2026-10-01', '2026-10-28');
-        $this->assertSame(15000, $this->row($e)->deduction_amount);
+        $this->assertSame(80000, $this->row($old)->deduction_amount); // Presensi lama tetap.
+        $this->assertSame(80000, $waiting->fresh()->deduction_per_day); // Pengajuan yang sudah dibuat tetap.
+        $this->assertSame(['amount' => 80000, 'final' => false], $waiting->fresh()->deductionSummary());
+
+        // Pengajuan baru memakai nominal baru, tanpa perlu aturan potongan.
+        $this->assertSame(0, DeductionRuleSet::count());
+        $this->submit($this->makeEmployee(), ['type' => 'izin'])->assertCreated();
+        $this->assertSame(15000, LeaveRequest::latest('id')->first()->deduction_per_day);
     }
 
-    public function test_admin_sets_leave_amounts_in_rule_form(): void
+    public function test_admin_manages_leave_types(): void
     {
-        $admin = User::create(['institution_id' => $this->inst->id, 'name' => 'Admin', 'email' => 'a@kampus.test', 'password' => 'x']);
+        $admin = User::create(['institution_id' => $this->inst->id, 'name' => 'Admin', 'email' => 'a@kampus.test', 'password' => 'x', 'is_active' => true]);
         $admin->assignRole(User::ROLE_ADMIN);
         $this->actingAs($admin);
+        $this->get('/admin/leave-types')->assertOk()->assertSee('Cuti')->assertSee('Tugas luar');
 
-        Livewire::test(ManageDeductionRuleSets::class)
-            ->callAction('create', ['effective_from' => '2026-11-01', 'leave_amounts' => ['izin' => 25000, 'sakit' => 0, 'cuti' => 0, 'tugas_luar' => 0]])
+        Livewire::test(ManageLeaveTypes::class)
+            ->callAction('create', ['name' => 'Cuti melahirkan', 'code' => 'cuti_melahirkan', 'attendance_status' => 'leave',
+                'deduction_per_day' => 0, 'annual_quota_days' => 90, 'requires_attachment' => true, 'is_active' => true])
             ->assertHasNoActionErrors();
+        // Kode harus unik dan berformat kode.
+        Livewire::test(ManageLeaveTypes::class)
+            ->callAction('create', ['name' => 'Ganda', 'code' => 'cuti', 'attendance_status' => 'leave', 'deduction_per_day' => 0])
+            ->assertHasActionErrors(['code' => 'unique']);
+        Livewire::test(ManageLeaveTypes::class)
+            ->callAction('create', ['name' => 'Salah', 'code' => 'Cuti Besar', 'attendance_status' => 'leave', 'deduction_per_day' => 0])
+            ->assertHasActionErrors(['code' => 'regex']);
 
-        $rules = DeductionRuleSet::sole();
-        $this->assertSame(25000, $rules->leaveAmount(LeaveType::Izin));
-        $this->assertSame(0, $rules->leaveAmount(LeaveType::Cuti));
-        $this->assertStringContainsString('Izin Rp25.000/hari', $rules->summary());
+        $type = LeaveType::findCode($this->inst->id, 'cuti_melahirkan');
+        $this->assertSame([90, true, AttendanceStatus::Leave], [$type->annual_quota_days, $type->requires_attachment, $type->attendance_status]);
+
+        // Ubah potongan Izin lewat form.
+        $izin = LeaveType::findCode($this->inst->id, 'izin');
+        Livewire::test(ManageLeaveTypes::class)
+            ->callTableAction('edit', $izin, ['deduction_per_day' => 30000])->assertHasNoTableActionErrors();
+        $this->assertSame(30000, $izin->fresh()->deduction_per_day);
+
+        // Jenis yang sudah dipakai tidak bisa dihapus.
+        $this->leave($this->makeEmployee(), 'izin', '2026-11-02');
+        Livewire::test(ManageLeaveTypes::class)
+            ->assertTableActionHidden('delete', $izin)
+            ->assertTableActionVisible('delete', $type);
+    }
+
+    public function test_custom_leave_type_rules_apply_to_requests(): void
+    {
+        LeaveType::create(['institution_id' => $this->inst->id, 'code' => 'cuti_melahirkan', 'name' => 'Cuti melahirkan',
+            'attendance_status' => 'leave', 'annual_quota_days' => 3, 'requires_attachment' => true, 'deduction_per_day' => 5000]);
+        LeaveType::findCode($this->inst->id, 'sakit')->update(['is_active' => false]);
+        $e = $this->makeEmployee();
+        Sanctum::actingAs($e->user);
+
+        // Sakit dinonaktifkan: tidak ditawarkan; jenis baru ada di urutan terakhir.
+        $this->withHeader('X-Device-UID', $this->deviceUids[$e->id])->getJson('/api/v1/leaves')->assertOk()
+            ->assertJsonCount(4, 'meta.leave_types')
+            ->assertJsonPath('meta.leave_types.3.code', 'cuti_melahirkan')
+            ->assertJsonPath('meta.leave_types.3.quota_remaining', 3)
+            ->assertJsonPath('meta.leave_types.3.requires_attachment', true)
+            ->assertJsonPath('meta.leave_types.3.deduction_per_day', 5000)
+            ->assertJsonMissing(['code' => 'sakit']);
+
+        $data = ['type' => 'cuti_melahirkan', 'start_date' => '2026-11-02', 'end_date' => '2026-11-05'];
+        $this->submit($e, $data)->assertStatus(422)->assertJsonPath('error.message', 'Lampiran wajib untuk Cuti melahirkan.');
+        $this->submit($e, $data + ['attachment' => $this->image(11)])->assertStatus(422)
+            ->assertJsonPath('error.message', 'Sisa cuti melahirkan tahun 2026 tinggal 3 hari kerja; pengajuan ini 4 hari.');
+        $this->submit($e, ['type' => 'cuti_melahirkan', 'start_date' => '2026-11-02', 'end_date' => '2026-11-04', 'attachment' => $this->image(12)])
+            ->assertCreated()->assertJsonPath('data.type_label', 'Cuti melahirkan')->assertJsonPath('data.deduction.amount', 15000);
+        $this->submit($e, ['type' => 'sakit', 'start_date' => '2026-11-09', 'end_date' => '2026-11-09'])->assertStatus(422)
+            ->assertJsonPath('error.message', 'Jenis izin tidak tersedia.');
     }
 
     public function test_api_reports_leave_deductions_and_codes(): void
     {
-        $this->rules(['izin' => 25000]);
+        $this->amounts(['izin' => 25000]);
         $e = $this->makeEmployee();
         Sanctum::actingAs($e->user);
 
@@ -172,7 +231,7 @@ class LeaveGroupTest extends TestCase
             ->assertJsonPath('meta.leave_deductions.cuti', 0)
             ->assertJsonPath('meta.group_types', ['izin', 'tugas_luar']);
 
-        app(LeaveService::class)->approve($this->leave($e, LeaveType::Izin),
+        app(LeaveService::class)->approve($this->leave($e, 'izin'),
             User::create(['institution_id' => $this->inst->id, 'name' => 'Admin', 'email' => 'a@kampus.test', 'password' => 'x']));
         $this->withHeader('X-Device-UID', $this->deviceUids[$e->id])->getJson('/api/v1/attendance/history?month=2026-10')
             ->assertOk()->assertJsonPath('data.items.0.deduction_label', 'Izin')->assertJsonPath('data.items.0.deduction_amount', 25000);
@@ -238,7 +297,7 @@ class LeaveGroupTest extends TestCase
     {
         $a = $this->makeEmployee();
         $b = $this->makeEmployee();
-        $this->leave($b, LeaveType::Izin, '2026-11-03');
+        $this->leave($b, 'izin', '2026-11-03');
 
         $this->submit($a, ['member_ids' => [$b->id]])->assertStatus(422)
             ->assertJsonPath('error.message', fn ($m) => str_starts_with($m, "{$b->name}: bertumpuk dengan pengajuan Izin"));
@@ -320,7 +379,7 @@ class LeaveGroupTest extends TestCase
 
     public function test_admin_opens_leave_detail_and_approves_from_it(): void
     {
-        $this->rules(['tugas_luar' => 10000]);
+        $this->amounts(['tugas_luar' => 10000]);
         $a = $this->makeEmployee();
         $b = $this->makeEmployee();
         $this->submit($a, ['member_ids' => [$b->id], 'attachment' => $this->image(3)])->assertCreated();
@@ -348,7 +407,7 @@ class LeaveGroupTest extends TestCase
 
     public function test_leave_list_api_has_detail_fields(): void
     {
-        $this->rules(['tugas_luar' => 10000]);
+        $this->amounts(['tugas_luar' => 10000]);
         $a = $this->makeEmployee();
         $b = $this->makeEmployee();
         $this->submit($a, ['member_ids' => [$b->id], 'attachment' => $this->image(5)])->assertCreated();

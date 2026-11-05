@@ -50,7 +50,7 @@ class ApprovalNotifier
             $by = $first->submitter && $group->doesntContain(fn (LeaveRequest $l) => $l->employee_id === $first->submitted_by)
                 ? ", diajukan oleh {$first->submitter->name}" : '';
             $this->notify($this->approversFor($group->first()->employee),
-                "Pengajuan {$first->type->getLabel()}".($leaves->count() > 1 ? ' bersama' : ''),
+                "Pengajuan {$first->typeLabel()}".($leaves->count() > 1 ? ' bersama' : ''),
                 "$who · {$first->rangeLabel()}$days$by",
                 LeaveRequestResource::getUrl(panel: 'admin'), Heroicon::OutlinedDocumentText);
         }

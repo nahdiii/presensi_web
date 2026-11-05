@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\LeaveType;
 use App\Models\Concerns\BelongsToInstitution;
 use App\Support\Rupiah;
 use Carbon\CarbonImmutable;
@@ -36,7 +35,6 @@ class DeductionRuleSet extends Model
             'early_leave_tiers' => 'array',
             'no_checkout_amount' => 'integer',
             'absent_amount' => 'integer',
-            'leave_amounts' => 'array',
         ];
     }
 
@@ -51,12 +49,6 @@ class DeductionRuleSet extends Model
             ->whereDate('effective_from', '<=', CarbonImmutable::parse($date)->toDateString())
             ->orderByDesc('effective_from')->orderByDesc('id')
             ->first();
-    }
-
-    /** Potongan per hari kerja untuk jenis izin ini (0 = tidak dipotong). */
-    public function leaveAmount(LeaveType $type): int
-    {
-        return (int) ($this->leave_amounts[$type->value] ?? 0);
     }
 
     /** @return array{code: string, from: int, to: ?int, amount: int|string}|null */
@@ -85,8 +77,6 @@ class DeductionRuleSet extends Model
             'early_leave_tiers' => $tiers('PSW'),
             'no_checkout_amount' => 20000,
             'absent_amount' => 50000,
-            // Izin, sakit, cuti, dan tugas luar bawaannya tidak dipotong.
-            'leave_amounts' => collect(LeaveType::cases())->mapWithKeys(fn (LeaveType $t) => [$t->value => 0])->all(),
         ];
     }
 
@@ -95,8 +85,6 @@ class DeductionRuleSet extends Model
         $fmt = fn (array $tiers) => collect($tiers)->map(fn ($t) => $t['code'].' '.Rupiah::format($t['amount'] ?? 0))->implode(', ');
 
         return 'Terlambat: '.$fmt($this->late_tiers).' · Pulang cepat: '.$fmt($this->early_leave_tiers)
-            .' · Tidak absen pulang: '.Rupiah::format($this->no_checkout_amount).' · Alpa: '.Rupiah::format($this->absent_amount)
-            .(($leave = collect(LeaveType::cases())->filter(fn (LeaveType $t) => $this->leaveAmount($t) > 0)
-                ->map(fn (LeaveType $t) => $t->getLabel().' '.Rupiah::format($this->leaveAmount($t)).'/hari')->implode(', ')) ? ' · '.$leave : '');
+            .' · Tidak absen pulang: '.Rupiah::format($this->no_checkout_amount).' · Alpa: '.Rupiah::format($this->absent_amount);
     }
 }

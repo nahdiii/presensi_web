@@ -96,7 +96,7 @@ class CloseAttendanceDay extends Command
             ->first();
 
         $status = match (true) {
-            $leave !== null && ! $schedule->isDayOff => $leave->type->attendanceStatus(),
+            $leave !== null && ! $schedule->isDayOff => $leave->leaveType->attendanceStatus(),
             $schedule->isDayOff && CalendarEvent::where('institution_id', $employee->institution_id)->whereDate('date', $date)->exists() => AttendanceStatus::Holiday,
             $schedule->isDayOff => null, // Akhir pekan biasa tidak perlu dicatat.
             default => AttendanceStatus::Absent,

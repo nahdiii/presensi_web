@@ -14,7 +14,7 @@ class LeaveRequestResource extends JsonResource
         return [
             'id' => $this->id,
             'type' => $this->type,
-            'type_label' => $this->type->getLabel(),
+            'type_label' => $this->typeLabel(),
             'start_date' => $this->start_date->toDateString(),
             'end_date' => $this->end_date->toDateString(),
             'days' => $this->days,

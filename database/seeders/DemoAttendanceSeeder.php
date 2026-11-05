@@ -6,10 +6,9 @@ use App\Enums\AttendanceStatus;
 use App\Enums\AttendanceType;
 use App\Enums\EmployeeType;
 use App\Enums\LeaveStatus;
-use App\Enums\LeaveType;
 use App\Models\Attendance;
-use App\Models\AttendanceCorrection;
 use App\Models\AttendanceAttempt;
+use App\Models\AttendanceCorrection;
 use App\Models\Employee;
 use App\Models\ExitPermit;
 use App\Models\Institution;
@@ -145,7 +144,7 @@ class DemoAttendanceSeeder extends Seeder
         foreach ($employees->random(4) as $i => $e) {
             LeaveRequest::create([
                 'institution_id' => $inst->id, 'employee_id' => $e->id,
-                'type' => [LeaveType::Cuti, LeaveType::Sakit, LeaveType::TugasLuar, LeaveType::Izin][$i],
+                'type' => ['cuti', 'sakit', 'tugas_luar', 'izin'][$i],
                 'start_date' => $today->addDays($i + 1)->toDateString(), 'end_date' => $today->addDays($i + 2)->toDateString(),
                 'reason' => ['Cuti tahunan keperluan keluarga', 'Rawat jalan pasca operasi', 'Seminar nasional di Surabaya', 'Mengurus dokumen kependudukan'][$i],
                 'status' => LeaveStatus::Pending,

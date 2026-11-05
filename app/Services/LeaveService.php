@@ -3,11 +3,11 @@
 namespace App\Services;
 
 use App\Enums\LeaveStatus;
-use App\Enums\LeaveType;
 use App\Models\ActivityLog;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\LeaveRequest;
+use App\Models\LeaveType;
 use App\Models\User;
 use App\Notifications\Push\PushNotifier;
 use App\Support\AttachmentFingerprint;
@@ -36,18 +36,25 @@ class LeaveService
      * Lampiran yang isinya sama persis dengan lampiran pengajuan lain yang
      * masih berlaku ditolak; foto yang sekadar mirip ditandai untuk penyetuju.
      *
-     * @param  array{type: string, start_date: string, end_date: string, reason: string}  $data
+     * Potongan per hari jenis izin disalin ke setiap pengajuan saat ini juga,
+     * sehingga perubahan di master Jenis Izin tidak mengubah pengajuan lama.
+     *
+     * @param  array{type: string, start_date: string, end_date: string, reason: string}  $data  type = kode jenis
      * @param  Collection<int, Employee>|null  $members  rekan selain $employee
      * @return Collection<int, LeaveRequest> pengajuan $employee lebih dulu, lalu rekan
      */
     public function submit(Employee $employee, array $data, ?UploadedFile $attachment = null, ?Collection $members = null): Collection
     {
-        $type = LeaveType::from($data['type']);
+        $type = LeaveType::where('institution_id', $employee->institution_id)->where('code', $data['type'])->where('is_active', true)->first()
+            ?? throw ValidationException::withMessages(['type' => 'Jenis izin tidak tersedia.']);
+        if ($type->requires_attachment && ! $attachment) {
+            throw ValidationException::withMessages(['attachment' => "Lampiran wajib untuk {$type->name}."]);
+        }
         $start = CarbonImmutable::parse($data['start_date']);
         $end = CarbonImmutable::parse($data['end_date']);
         $members = ($members ?? collect())->reject(fn (Employee $m) => $m->id === $employee->id)->unique('id')->values();
         if ($members->isNotEmpty() && ! $type->allowsGroup()) {
-            throw ValidationException::withMessages(['member_ids' => "{$type->getLabel()} tidak bisa diajukan bersama rekan; setiap orang mengajukan sendiri."]);
+            throw ValidationException::withMessages(['member_ids' => "{$type->name} tidak bisa diajukan bersama rekan; setiap orang mengajukan sendiri."]);
         }
 
         $people = collect([$employee])->concat($members);
@@ -62,7 +69,9 @@ class LeaveService
                 'institution_id' => $e->institution_id,
                 'group_id' => $group,
                 'submitted_by' => $employee->id,
-                'type' => $type,
+                'leave_type_id' => $type->id,
+                'type' => $type->code,
+                'deduction_per_day' => $type->deduction_per_day,
                 'start_date' => $start->toDateString(),
                 'end_date' => $end->toDateString(),
                 'days' => $days[$e->id],
@@ -110,18 +119,18 @@ class LeaveService
             ->whereDate('end_date', '>=', $start->toDateString())
             ->first();
         if ($clash) {
-            $fail('start_date', "Bertumpuk dengan pengajuan {$clash->type->getLabel()} {$clash->rangeLabel()} ({$clash->status->getLabel()}).");
+            $fail('start_date', "Bertumpuk dengan pengajuan {$clash->typeLabel()} {$clash->rangeLabel()} ({$clash->status->getLabel()}).");
         }
         $perYear = $this->workdaysPerYear($e, $start, $end);
         $days = array_sum($perYear);
         if ($days === 0) {
             $fail('end_date', 'Rentang tanggal ini tidak berisi hari kerja.');
         }
-        if ($type === LeaveType::Cuti) {
+        if ($type->hasQuota()) {
             foreach ($perYear as $year => $n) {
-                $left = $this->quota($e, $year)['remaining'];
+                $left = $this->quota($e, $year, $type)['remaining'];
                 if ($n > $left) {
-                    $fail('end_date', "Sisa cuti tahun $year tinggal $left hari kerja; pengajuan ini $n hari.");
+                    $fail('end_date', 'Sisa '.lcfirst($type->name)." tahun $year tinggal $left hari kerja; pengajuan ini $n hari.");
                 }
             }
         }
@@ -148,8 +157,8 @@ class LeaveService
             ->orderByRaw('employee_id = ? desc', [$employee->id])->latest('id')->first();
         if ($same) {
             throw ValidationException::withMessages(['attachment' => $same->employee_id === $employee->id
-                ? "Lampiran ini sudah Anda pakai untuk pengajuan {$same->type->getLabel()} {$same->rangeLabel()}. Unggah dokumen untuk izin ini."
-                : "Lampiran ini sudah dipakai di pengajuan pegawai lain ({$same->type->getLabel()} {$same->rangeLabel()}). "
+                ? "Lampiran ini sudah Anda pakai untuk pengajuan {$same->typeLabel()} {$same->rangeLabel()}. Unggah dokumen untuk izin ini."
+                : "Lampiran ini sudah dipakai di pengajuan pegawai lain ({$same->typeLabel()} {$same->rangeLabel()}). "
                     .'Bila izinnya bersama, cukup satu orang mengajukan dan menambahkan rekan.']);
         }
 
@@ -178,17 +187,19 @@ class LeaveService
     }
 
     /**
-     * Jatah cuti tahunan dalam hari kerja. Pengajuan yang masih menunggu ikut
-     * mengurangi sisa supaya tidak bisa mengajukan melebihi jatah.
+     * Jatah per tahun dalam hari kerja untuk jenis ini (bawaan: cuti tahunan).
+     * Pengajuan yang masih menunggu ikut mengurangi sisa supaya tidak bisa
+     * mengajukan melebihi jatah.
      *
      * @return array{year: int, quota: int, used: int, pending: int, remaining: int}
      */
-    public function quota(Employee $employee, int $year): array
+    public function quota(Employee $employee, int $year, ?LeaveType $type = null): array
     {
-        $quota = $employee->annual_leave_quota ?? config('attendance.leave.annual_quota_days');
+        $type ??= LeaveType::findCode($employee->institution_id, LeaveType::ANNUAL_LEAVE);
+        $quota = ($type ? $type->quotaFor($employee) : null) ?? config('attendance.leave.annual_quota_days');
         $used = $pending = 0;
         $leaves = $employee->leaveRequests()
-            ->where('type', LeaveType::Cuti)
+            ->where('leave_type_id', $type?->id)
             ->whereIn('status', [LeaveStatus::Pending, LeaveStatus::Approved])
             ->whereDate('start_date', '<=', "$year-12-31")
             ->whereDate('end_date', '>=', "$year-01-01")
@@ -250,12 +261,12 @@ class LeaveService
                 $row->fill([
                     'institution_id' => $employee->institution_id,
                     'leave_request_id' => $leave->id,
-                    'status' => $leave->type->attendanceStatus(),
+                    'status' => $leave->leaveType->attendanceStatus(),
                     'schedule_snapshot' => $schedule->toArray(),
-                    'note' => $leave->type->getLabel().': '.str($leave->reason)->limit(150),
+                    'note' => $leave->typeLabel().': '.str($leave->reason)->limit(150),
                 ])->save();
             }
-            ActivityLog::record($approver, 'review', "Menyetujui {$leave->type->getLabel()} {$employee->name} {$leave->rangeLabel()}");
+            ActivityLog::record($approver, 'review', "Menyetujui {$leave->typeLabel()} {$employee->name} {$leave->rangeLabel()}");
         });
 
         $this->notify($leave, true);
@@ -269,13 +280,13 @@ class LeaveService
             'approved_at' => now(),
             'review_note' => $note,
         ]);
-        ActivityLog::record($approver, 'review', "Menolak {$leave->type->getLabel()} {$leave->employee->name} {$leave->rangeLabel()}");
+        ActivityLog::record($approver, 'review', "Menolak {$leave->typeLabel()} {$leave->employee->name} {$leave->rangeLabel()}");
         $this->notify($leave, false);
     }
 
     private function notify(LeaveRequest $leave, bool $approved): void
     {
-        $this->push->send($leave->employee, $leave->type->getLabel().' '.($approved ? 'disetujui' : 'ditolak'),
+        $this->push->send($leave->employee, $leave->typeLabel().' '.($approved ? 'disetujui' : 'ditolak'),
             $leave->start_date->translatedFormat('d M').' – '.$leave->end_date->translatedFormat('d M Y').($leave->review_note ? ': '.$leave->review_note : ''),
             ['type' => 'leave', 'id' => (string) $leave->id]);
     }

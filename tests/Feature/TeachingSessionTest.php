@@ -6,7 +6,6 @@ use App\Enums\AttendanceStatus;
 use App\Enums\AttendanceType;
 use App\Enums\EmployeeType;
 use App\Enums\LeaveStatus;
-use App\Enums\LeaveType;
 use App\Models\AttendanceAttempt;
 use App\Models\CalendarEvent;
 use App\Models\Course;
@@ -265,7 +264,7 @@ class TeachingSessionTest extends TestCase
     {
         $e = $this->lecturer();
         $this->schedule($e);
-        LeaveRequest::create(['institution_id' => $this->inst->id, 'employee_id' => $e->id, 'type' => LeaveType::Sakit,
+        LeaveRequest::create(['institution_id' => $this->inst->id, 'employee_id' => $e->id, 'type' => 'sakit',
             'start_date' => '2026-10-28', 'end_date' => '2026-10-28', 'reason' => 'Demam', 'status' => LeaveStatus::Approved]);
         $this->at('2026-10-28 08:00');
         Sanctum::actingAs($e->user);
@@ -286,7 +285,7 @@ class TeachingSessionTest extends TestCase
         $this->schedule($missed);
         $this->schedule($sick);
         $evening = $this->schedule($missed, ['class_name' => 'B', 'start_time' => '19:00', 'end_time' => '20:40']);
-        LeaveRequest::create(['institution_id' => $this->inst->id, 'employee_id' => $sick->id, 'type' => LeaveType::Sakit,
+        LeaveRequest::create(['institution_id' => $this->inst->id, 'employee_id' => $sick->id, 'type' => 'sakit',
             'start_date' => '2026-10-28', 'end_date' => '2026-10-28', 'reason' => 'Demam', 'status' => LeaveStatus::Approved]);
 
         $this->at('2026-10-28 08:00');

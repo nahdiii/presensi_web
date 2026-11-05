@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Enums\LeaveStatus;
-use App\Enums\LeaveType;
 use App\Filament\Resources\ActivityLogs\ActivityLogResource;
 use App\Filament\Resources\ActivityLogs\Pages\ListActivityLogs;
 use App\Filament\Resources\Employees\Pages\EditEmployee;
@@ -177,14 +176,14 @@ class ActivityLogTest extends TestCase
     {
         $employee = $this->staff->employee;
         $leave = LeaveRequest::create([
-            'institution_id' => $this->inst->id, 'employee_id' => $employee->id, 'type' => LeaveType::Cuti,
+            'institution_id' => $this->inst->id, 'employee_id' => $employee->id, 'type' => 'cuti',
             'start_date' => '2026-11-02', 'end_date' => '2026-11-02', 'days' => 1, 'reason' => 'Keluarga', 'status' => LeaveStatus::Pending,
         ]);
 
         app(LeaveService::class)->approve($leave, $this->admin);
 
         $this->assertDatabaseHas('activity_logs', ['user_id' => $this->admin->id, 'action' => 'review',
-            'description' => "Menyetujui {$leave->type->getLabel()} {$this->staff->name} 02 Nov 2026"]);
+            'description' => "Menyetujui {$leave->typeLabel()} {$this->staff->name} 02 Nov 2026"]);
     }
 
     public function test_password_change_never_stores_password(): void

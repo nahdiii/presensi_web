@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\LeaveRequests;
 
 use App\Enums\LeaveStatus;
-use App\Enums\LeaveType;
 use App\Filament\Concerns\ScopedToSupervisedUnits;
 use App\Filament\Resources\LeaveRequests\Pages\ListLeaveRequests;
 use App\Models\LeaveRequest;
@@ -63,7 +62,7 @@ class LeaveRequestResource extends Resource
         $review = fn (string $name, string $label, string $color, bool $approve) => self::reviewAction($name, $label, $color, $approve);
 
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['employee.user', 'employee.unit', 'approver', 'submitter.user',
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['employee.user', 'employee.unit', 'approver', 'submitter.user', 'leaveType',
                 'groupMembers.employee.user', 'similarTo.employee.user']))
             ->defaultSort('created_at', 'desc')
             // Klik baris membuka detail; Setujui/Tolak juga tersedia di dalamnya.
@@ -71,11 +70,11 @@ class LeaveRequestResource extends Resource
             ->columns(self::columns())
             ->filters([
                 SelectFilter::make('status')->options(LeaveStatus::class)->default(LeaveStatus::Pending->value),
-                SelectFilter::make('type')->label('Jenis')->options(LeaveType::class),
+                SelectFilter::make('leave_type_id')->label('Jenis')->relationship('leaveType', 'name'),
             ])
             ->recordActions([
                 ViewAction::make()->label('Detail')->slideOver()->modalWidth(Width::ThreeExtraLarge)
-                    ->modalHeading(fn (LeaveRequest $r) => "{$r->type->getLabel()} · {$r->employee->name}")
+                    ->modalHeading(fn (LeaveRequest $r) => "{$r->typeLabel()} · {$r->employee->name}")
                     ->extraModalFooterActions(fn () => [
                         $review('approveFromDetail', 'Setujui', 'success', true)->cancelParentActions(),
                         $review('rejectFromDetail', 'Tolak', 'danger', false)->cancelParentActions(),
@@ -110,7 +109,7 @@ class LeaveRequestResource extends Resource
                 ->formatStateUsing(fn (LeaveRequest $r) => ($r->groupMembers->count() - 1).' rekan')
                 ->tooltip(fn (LeaveRequest $r) => $r->groupMembers->where('id', '!=', $r->id)
                     ->map(fn (LeaveRequest $l) => $l->employee->name.' ('.$l->status->getLabel().')')->implode(', ')),
-            TextColumn::make('type')->label('Jenis')->badge(),
+            TextColumn::make('leaveType.name')->label('Jenis')->badge()->color('info'),
             TextColumn::make('start_date')->label('Tanggal')
                 ->formatStateUsing(fn (LeaveRequest $r) => $r->start_date->translatedFormat('d M').($r->end_date->ne($r->start_date) ? ' – '.$r->end_date->translatedFormat('d M Y') : ' '.$r->start_date->format('Y'))),
             TextColumn::make('days')->label('Hari kerja')->placeholder('-'),
@@ -120,7 +119,7 @@ class LeaveRequestResource extends Resource
                 // Foto yang mirip lampiran pengajuan lain (mis. surat yang sama difoto ulang).
                 ->icon(fn (LeaveRequest $r) => $r->similarTo ? Heroicon::OutlinedExclamationTriangle : null)->iconColor('danger')
                 ->description(fn (LeaveRequest $r) => $r->similarTo
-                    ? "Mirip lampiran {$r->similarTo->employee->name} ({$r->similarTo->type->getLabel()} {$r->similarTo->rangeLabel()})" : null)
+                    ? "Mirip lampiran {$r->similarTo->employee->name} ({$r->similarTo->typeLabel()} {$r->similarTo->rangeLabel()})" : null)
                 ->placeholder('-'),
             TextColumn::make('status')->badge(),
             TextColumn::make('approver.name')->label('Diputuskan oleh')->placeholder('-')
@@ -146,7 +145,7 @@ class LeaveRequestResource extends Resource
             Section::make('Pengajuan')->columns(3)->components([
                 TextEntry::make('employee.user.name')->label('Pegawai')
                     ->helperText(fn (LeaveRequest $r) => collect([$r->employee->nip, $r->employee->unit?->name])->filter()->implode(' · ')),
-                TextEntry::make('type')->label('Jenis')->badge(),
+                TextEntry::make('leaveType.name')->label('Jenis')->badge()->color('info'),
                 TextEntry::make('status')->label('Status')->badge(),
                 TextEntry::make('start_date')->label('Tanggal')->state(fn (LeaveRequest $r) => $r->rangeLabel()),
                 TextEntry::make('days')->label('Hari kerja')->suffix(' hari')
@@ -157,7 +156,7 @@ class LeaveRequestResource extends Resource
                     ->helperText(fn (LeaveRequest $r) => match (true) {
                         $r->status === LeaveStatus::Approved => 'Tercatat di presensi',
                         $r->status === LeaveStatus::Rejected => 'Ditolak, tidak dipotong',
-                        default => 'Perkiraan: hari kerja × nominal '.$r->type->getLabel(),
+                        default => 'Perkiraan: hari kerja × '.Rupiah::format($r->deduction_per_day).'/hari (nominal saat diajukan)',
                     }),
                 TextEntry::make('created_at')->label('Diajukan')
                     ->state(fn (LeaveRequest $r) => $r->created_at->setTimezone($tz)->translatedFormat('d M Y H:i'))
@@ -172,7 +171,7 @@ class LeaveRequestResource extends Resource
                     ...$attachment('own', 'Lampiran pengajuan ini', fn (LeaveRequest $r) => $r),
                     TextEntry::make('similar_info')->label('Mirip dengan')->color('danger')->icon(Heroicon::OutlinedExclamationTriangle)
                         ->state(fn (LeaveRequest $r) => $r->similarTo
-                            ? "{$r->similarTo->employee->name} · {$r->similarTo->type->getLabel()} {$r->similarTo->rangeLabel()} ({$r->similarTo->status->getLabel()})" : null)
+                            ? "{$r->similarTo->employee->name} · {$r->similarTo->typeLabel()} {$r->similarTo->rangeLabel()} ({$r->similarTo->status->getLabel()})" : null)
                         ->visible(fn (LeaveRequest $r) => $r->similarTo !== null),
                     ...$attachment('similar', 'Lampiran pembanding', fn (LeaveRequest $r) => $r->similarTo),
                 ]),

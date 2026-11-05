@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Enums\AttendanceStatus;
 use App\Enums\LeaveStatus;
-use App\Enums\LeaveType;
 use App\Enums\WorkPatternType;
 use App\Filament\Resources\WorkPatterns\Pages\EditWorkPattern;
 use App\Jobs\ProcessAttendancePhoto;
@@ -99,7 +98,7 @@ class DeductionTest extends TestCase
         $absent = $this->makeEmployee();
         $sick = $this->makeEmployee();
         LeaveRequest::create([
-            'institution_id' => $this->inst->id, 'employee_id' => $sick->id, 'type' => LeaveType::Sakit,
+            'institution_id' => $this->inst->id, 'employee_id' => $sick->id, 'type' => 'sakit',
             'start_date' => '2026-10-28', 'end_date' => '2026-10-28', 'reason' => 'Demam', 'status' => LeaveStatus::Approved,
         ]);
         $this->at('2026-10-28 07:50'); // 20 menit → TL1

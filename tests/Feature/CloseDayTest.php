@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Enums\AttendanceStatus;
 use App\Enums\LeaveStatus;
-use App\Enums\LeaveType;
 use App\Models\Attendance;
 use App\Models\LeaveRequest;
 use App\Models\User;
@@ -37,7 +36,7 @@ class CloseDayTest extends TestCase
         $complete = $this->makeEmployee();
         $onLeave = $this->makeEmployee();
         LeaveRequest::create([
-            'institution_id' => $this->inst->id, 'employee_id' => $onLeave->id, 'type' => LeaveType::Sakit,
+            'institution_id' => $this->inst->id, 'employee_id' => $onLeave->id, 'type' => 'sakit',
             'start_date' => '2026-10-28', 'end_date' => '2026-10-28', 'reason' => 'Demam', 'status' => LeaveStatus::Approved,
         ]);
 
@@ -80,7 +79,7 @@ class CloseDayTest extends TestCase
         $e = $this->makeEmployee();
         $approver = User::create(['name' => 'Kepala', 'email' => 'kepala@kampus.test', 'password' => 'x']);
         $leave = LeaveRequest::create([
-            'institution_id' => $this->inst->id, 'employee_id' => $e->id, 'type' => LeaveType::TugasLuar,
+            'institution_id' => $this->inst->id, 'employee_id' => $e->id, 'type' => 'tugas_luar',
             'start_date' => '2026-10-29', 'end_date' => '2026-11-02', 'reason' => 'Seminar nasional', 'status' => LeaveStatus::Pending,
         ]);
 

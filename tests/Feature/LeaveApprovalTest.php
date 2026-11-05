@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Enums\AttendanceStatus;
 use App\Enums\LeaveStatus;
-use App\Enums\LeaveType;
 use App\Enums\UnitType;
 use App\Filament\Resources\Attendances\Pages\ListAttendances;
 use App\Jobs\ProcessAttendancePhoto;
@@ -113,7 +112,7 @@ class LeaveApprovalTest extends TestCase
         $this->withHeader('X-Device-UID', $this->deviceUids[$e->id])->getJson('/api/v1/leaves')
             ->assertJsonPath('meta.leave_quota', ['year' => 2026, 'quota' => 4, 'used' => 0, 'pending' => 3, 'remaining' => 1]);
 
-        app(LeaveService::class)->approve(LeaveRequest::where('type', LeaveType::Cuti)->sole(), User::first());
+        app(LeaveService::class)->approve(LeaveRequest::where('type', 'cuti')->sole(), User::first());
         $this->assertSame(['year' => 2026, 'quota' => 4, 'used' => 3, 'pending' => 0, 'remaining' => 1],
             app(LeaveService::class)->quota($e->fresh(), 2026));
     }
