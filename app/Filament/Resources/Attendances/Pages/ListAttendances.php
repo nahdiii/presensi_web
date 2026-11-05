@@ -105,6 +105,9 @@ class ListAttendances extends ListRecords
             ->schema([Select::make('month')->label('Bulan')->options($months)->default(array_key_first($months))->required()])
             ->modalSubmitActionLabel('Unduh .xlsx')
             ->action(function (array $data) {
+                // Rekap satu bulan untuk ratusan pegawai butuh lebih dari batas bawaan PHP (128 MB / 30 detik).
+                ini_set('memory_limit', config('attendance.export_memory_limit'));
+                set_time_limit(config('attendance.export_time_limit'));
                 ActivityLog::record(auth()->user(), 'report', "Mengunduh rekap presensi {$data['month']}");
 
                 return Excel::download(

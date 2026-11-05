@@ -4,10 +4,10 @@ namespace App\Filament\Resources\Attendances;
 
 use App\Enums\AttendanceStatus;
 use App\Filament\Concerns\ScopedToSupervisedUnits;
+use App\Filament\Filters\UnitFilter;
 use App\Filament\Resources\Attendances\Pages\ListAttendances;
 use App\Filament\Resources\Attendances\Pages\ViewAttendance;
 use App\Models\Attendance;
-use App\Models\Unit;
 use App\Support\Rupiah;
 use BackedEnum;
 use Carbon\Carbon;
@@ -97,10 +97,7 @@ class AttendanceResource extends Resource
                     ->when($data['from'] ?? null, fn ($query, $d) => $query->whereDate('date', '>=', $d))
                     ->when($data['until'] ?? null, fn ($query, $d) => $query->whereDate('date', '<=', $d))),
                 SelectFilter::make('status')->options(AttendanceStatus::class)->multiple(),
-                SelectFilter::make('unit')->label('Unit')->searchable()
-                    ->options(fn () => Unit::orderBy('name')->pluck('name', 'id')->all())
-                    ->query(fn (Builder $query, array $data) => $query->when($data['value'] ?? null,
-                        fn ($query, $unit) => $query->whereHas('employee', fn ($e) => $e->where('unit_id', $unit)))),
+                UnitFilter::make(),
             ])
             ->recordActions([ViewAction::make()]);
     }

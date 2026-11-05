@@ -67,4 +67,10 @@ return [
     // Perubahan jam kerja / aturan potongan boleh berlaku mundur paling jauh
     // sekian hari; presensi pada rentang itu dihitung ulang otomatis.
     'recalculate_max_days' => 62,
+
+    // Batas memori dan waktu (detik) saat mengunduh rekap bulanan .xlsx.
+    // Kira-kira 170 MB untuk 8.000 baris rincian (±370 pegawai × 22 hari kerja)
+    // dan 250 MB untuk 16.000 baris.
+    'export_memory_limit' => env('ATTENDANCE_EXPORT_MEMORY_LIMIT', '512M'),
+    'export_time_limit' => (int) env('ATTENDANCE_EXPORT_TIME_LIMIT', 180),
 ];

@@ -5,10 +5,10 @@ namespace App\Filament\Resources\TeachingSessions;
 use App\Enums\AttendanceStatus;
 use App\Filament\Concerns\RequiresTeachingSessions;
 use App\Filament\Concerns\ScopedToSupervisedUnits;
+use App\Filament\Filters\UnitFilter;
 use App\Filament\Resources\TeachingSessions\Pages\ListTeachingSessions;
 use App\Filament\Resources\TeachingSessions\Pages\ViewTeachingSession;
 use App\Models\TeachingSession;
-use App\Models\Unit;
 use BackedEnum;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
@@ -85,10 +85,7 @@ class TeachingSessionResource extends Resource
                 SelectFilter::make('status')->options(collect(AttendanceStatus::cases())
                     ->reject(fn ($s) => $s === AttendanceStatus::Incomplete)
                     ->mapWithKeys(fn ($s) => [$s->value => $s->getLabel()])->all())->multiple(),
-                SelectFilter::make('unit')->label('Unit')->searchable()
-                    ->options(fn () => Unit::orderBy('name')->pluck('name', 'id')->all())
-                    ->query(fn (Builder $query, array $data) => $query->when($data['value'] ?? null,
-                        fn ($query, $unit) => $query->whereHas('employee', fn ($e) => $e->where('unit_id', $unit)))),
+                UnitFilter::make(),
             ])
             ->recordActions([ViewAction::make()]);
     }

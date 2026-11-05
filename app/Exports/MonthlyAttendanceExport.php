@@ -8,13 +8,17 @@ use App\Models\Employee;
 use App\Models\TeachingSession;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Maatwebsite\Excel\Concerns\Export;
 use Maatwebsite\Excel\Concerns\WithMultipleSheets;
 
 /**
  * Rekap bulanan untuk tunjangan kehadiran/remunerasi: satu lembar ringkasan
  * per pegawai, satu lembar rincian harian, dan lembar sesi mengajar bila ada.
+ *
+ * Di maatwebsite/excel v4, WithMultipleSheets tidak lagi turunan Export,
+ * jadi Export wajib disebut sendiri agar Excel::download() menerimanya.
  */
-class MonthlyAttendanceExport implements WithMultipleSheets
+class MonthlyAttendanceExport implements Export, WithMultipleSheets
 {
     /** @param array<int>|null $unitIds null = semua unit */
     public function __construct(private readonly string $month, private readonly ?array $unitIds = null) {}
