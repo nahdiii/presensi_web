@@ -325,9 +325,11 @@ class AttendanceService
     }
 
     /**
-     * Cek lokasi asli lalu radius. Jarak dicek terhadap lokasi terdekat yang
-     * diizinkan; bila pegawai berada di radius lokasi kampus lain yang tidak
-     * diizinkan untuknya, ditolak office_not_allowed. $allowed mempersempit
+     * Cek lokasi asli lalu radius. Lokasi dipilih otomatis di antara yang
+     * diizinkan: yang radiusnya memuat posisi pegawai (terdekat bila lebih
+     * dari satu), lihat GeofenceService::locate(). Bila pegawai berada di
+     * radius lokasi kampus lain yang tidak diizinkan untuknya, ditolak
+     * office_not_allowed. $allowed mempersempit
      * lokasi, mis. gedung tempat kuliah dijadwalkan.
      *
      * @param  Collection<int, Office>|null  $allowed
@@ -350,7 +352,7 @@ class AttendanceService
         }
 
         $allowed = ($allowed ?? $employee->offices)->where('is_active', true);
-        $nearest = $this->geofence->nearest($allowed, $p->lat, $p->lng);
+        $nearest = $this->geofence->locate($allowed, $p->lat, $p->lng);
         if ($nearest) {
             [$office, $distance] = $nearest;
             $ctx = ['office_id' => $office->id, 'distance_m' => round($distance, 2)];
@@ -359,7 +361,7 @@ class AttendanceService
             }
         }
 
-        $other = $this->geofence->nearest(
+        $other = $this->geofence->locate(
             Office::where('institution_id', $employee->institution_id)->where('is_active', true)
                 ->whereNotIn('id', $allowed->pluck('id'))->get(),
             $p->lat, $p->lng,

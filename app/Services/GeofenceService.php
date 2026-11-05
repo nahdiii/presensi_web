@@ -20,16 +20,21 @@ class GeofenceService
     }
 
     /**
-     * Lokasi terdekat dari daftar, beserta jaraknya.
+     * Lokasi tempat titik ini berada: yang terdekat di antara lokasi yang
+     * radiusnya memuat titik itu. Bila tidak ada yang memuat, lokasi terdekat
+     * (untuk pesan "Anda berada … m dari …"). Penting bila radius bertumpuk,
+     * mis. gedung kecil di dalam area kampus yang lebih luas: titik di luar
+     * gedung tetapi masih di area kampus tetap sah untuk kampus itu.
      *
      * @param  Collection<int, Office>  $offices
      * @return array{0: Office, 1: float}|null
      */
-    public function nearest(Collection $offices, float $lat, float $lng): ?array
+    public function locate(Collection $offices, float $lat, float $lng): ?array
     {
-        return $offices
+        $byDistance = $offices
             ->map(fn (Office $o) => [$o, $this->distanceMeters($lat, $lng, $o->latitude, $o->longitude)])
-            ->sortBy(fn (array $pair) => $pair[1])
-            ->first();
+            ->sortBy(fn (array $pair) => $pair[1]);
+
+        return $byDistance->first(fn (array $pair) => $pair[1] <= $pair[0]->radius_m) ?? $byDistance->first();
     }
 }

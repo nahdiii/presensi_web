@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\AttendanceStatus;
+use App\Enums\AttendanceType;
 use App\Enums\WorkPatternType;
 use App\Models\Attendance;
 use App\Models\AttendanceAttempt;
@@ -192,7 +193,7 @@ class CheckInTest extends TestCase
 
     public function test_per_session_lecturer_cannot_use_daily_check_in(): void
     {
-        $e = $this->makeEmployee(['attendance_type' => \App\Enums\AttendanceType::Session]);
+        $e = $this->makeEmployee(['attendance_type' => AttendanceType::Session]);
         $this->at('2026-10-28 08:00');
 
         $this->punch($e)->assertStatus(422)
@@ -238,6 +239,18 @@ class CheckInTest extends TestCase
         $this->at('2026-10-28 16:05');
         $this->punch($e, 'out', ['latitude' => -3.2986, 'longitude' => 114.6012])->assertOk()
             ->assertJsonPath('data.check_out.office.name', 'Kampus 2');
+    }
+
+    public function test_overlapping_campuses_use_the_one_whose_radius_contains_the_employee(): void
+    {
+        // Gedung kecil di dalam area kampus yang lebih luas; pusat gedung lebih dekat.
+        $building = $this->makeOffice('Gedung Teknik', -3.2990, 114.6000, 50);
+        $campus = $this->makeOffice('Kampus 2', -3.3000, 114.6000, 400);
+        $e = $this->makeEmployee([], [$building, $campus]);
+        $this->at('2026-10-28 07:20');
+
+        $this->punch($e, 'in', ['latitude' => -3.29825, 'longitude' => 114.6000])->assertCreated()
+            ->assertJsonPath('data.check_in.office.name', 'Kampus 2');
     }
 
     public function test_check_out_rules(): void
